@@ -1224,28 +1224,63 @@
     const stories    = document.getElementById('stories').value;
     const projectType = selectedType || 'new-home';
 
-    const prompt = `You are an expert residential architect and building code specialist. A homeowner needs a custom floor plan.
+    const prompt = `You are an expert residential architect. Generate a detailed, spatially accurate floor plan as JSON.
+
 LOCATION: ${city ? city + ', ' : ''}${state}
 PROJECT TYPE: ${projectType}
-SQUARE FOOTAGE PREFERENCE: ${sqft || 'flexible, optimize for needs'}
+SQUARE FOOTAGE: ${sqft || 'flexible'}
 STORIES: ${stories}
-HOMEOWNER DESCRIPTION: ${description}
-Please respond with ONLY a valid JSON object (no markdown, no extra text) with this exact structure:
+DESCRIPTION: ${description}
+
+Return ONLY a valid JSON object — no markdown, no explanation. Room x,y coordinates are in FEET from the top-left corner. Rooms must share walls (adjacent rooms touch; no floating gaps). Place rooms so they form a real connected floor plan.
+
 {
-  "title": "Short descriptive name for this floor plan",
-  "totalSqft": 2100,
+  "title": "Descriptive plan name",
+  "totalSqft": 1800,
   "bedrooms": 3,
   "bathrooms": 2,
   "stories": 1,
-  "summary": "2-3 sentence summary of the design and how it serves this family's specific needs",
+  "summary": "2-3 sentences describing the design and flow",
   "rooms": [
-    {"name": "Master Bedroom", "width": 14, "depth": 16, "sqft": 224, "notes": "Private suite away from kids"}
+    {
+      "name": "Living Room",
+      "x": 0, "y": 0,
+      "width": 18, "depth": 16,
+      "sqft": 288,
+      "notes": "Open to kitchen",
+      "doors": [
+        { "wall": "south", "offset": 0.1, "width": 3, "direction": "right" }
+      ],
+      "windows": [
+        { "wall": "north", "offset": 0.1, "width": 5 },
+        { "wall": "west",  "offset": 0.3, "width": 3 }
+      ],
+      "lighting": [
+        { "x": 0.5, "y": 0.5, "type": "ceiling" }
+      ]
+    }
   ],
   "codeCompliance": [
-    {"icon": "✓", "title": "Minimum Room Sizes", "detail": "All bedrooms meet ${state} IRC minimums (70 sq ft, 7ft ceiling height)"}
+    { "icon": "✓", "title": "Egress Windows", "detail": "All bedrooms have IRC R310-compliant egress windows" }
   ],
-  "localCodeNote": "One specific note about ${state}${city ? ' / ' + city : ''} building code that affects this design"
-}`;
+  "localCodeNote": "Specific code note for ${state}${city ? ' / ' + city : ''}"
+}
+
+STRICT RULES:
+- x,y = top-left corner of each room in feet. Rooms must be touching (share walls), not floating.
+- Start at x:0, y:0 for the first anchor room. Build outward by adding widths/depths.
+- Include every space: bedrooms, bathrooms, kitchen, living, dining, hallways, laundry, garage, mudroom, etc.
+- doors[].wall: "north" | "south" | "east" | "west"
+- doors[].offset: 0.0–1.0 position along that wall (0 = start, 1 = end)
+- doors[].width: door width in feet (2.8 interior, 3.0 exterior)
+- doors[].direction: "right" | "left" (which side the hinge is on)
+- windows[].wall, windows[].offset, windows[].width (feet)
+- lighting[].x and lighting[].y: 0.0–1.0 within room (0.5,0.5 = center)
+- lighting[].type: "ceiling" | "recessed" | "fan"
+- Exterior walls get windows. Interior walls get doors between rooms.
+- Bedrooms: 1 fan or ceiling light + egress window on an exterior wall.
+- Bathrooms: 1 ceiling light minimum, small privacy window.
+- Kitchen: 2 recessed lights minimum.`;
 
     try {
       // Call our secure proxy — never expose the API key in the browser
@@ -1272,32 +1307,65 @@ Please respond with ONLY a valid JSON object (no markdown, no extra text) with t
 
   function getDemoData(state, city) {
     return {
-      title: "Custom Family Ranch",
-      totalSqft: 1980,
+      title: "Hillcrest Family Ranch",
+      totalSqft: 1876,
       bedrooms: 3,
       bathrooms: 2,
       stories: 1,
-      summary: "A thoughtfully designed single-story ranch that keeps the family connected. The open kitchen and living area create a natural hub for entertaining and keeping an eye on kids, while the master suite is tucked to the east wing for maximum privacy.",
+      summary: "A single-story ranch with an open kitchen and living core, a private master wing to the west, and two kids' bedrooms sharing a bath to the east. A mudroom off the garage keeps everyday traffic from the main living area.",
       rooms: [
-        {name:"Master Bedroom", width:14, depth:16, sqft:224, notes:"Private east wing"},
-        {name:"Master Bath",    width:10, depth:9,  sqft:90,  notes:"Walk-in shower + soaker"},
-        {name:"Bedroom 2",      width:12, depth:12, sqft:144, notes:"North wing"},
-        {name:"Bedroom 3",      width:11, depth:12, sqft:132, notes:"North wing"},
-        {name:"Full Bath",      width:8,  depth:8,  sqft:64,  notes:"Shared, north wing"},
-        {name:"Kitchen",        width:14, depth:16, sqft:224, notes:"Island, open to living"},
-        {name:"Living Room",    width:20, depth:18, sqft:360, notes:"Vaulted ceiling"},
-        {name:"Dining",         width:12, depth:14, sqft:168, notes:"Bay window"},
-        {name:"Mudroom",        width:8,  depth:10, sqft:80,  notes:"Garage entry"},
-        {name:"Laundry",        width:8,  depth:8,  sqft:64,  notes:"Main floor"},
-        {name:"Garage",         width:22, depth:24, sqft:528, notes:"2-car attached"}
+        { name:"Living Room",    x:0,  y:0,  width:18, depth:16, sqft:288, notes:"Open to kitchen, vaulted ceiling",
+          doors:[{wall:"east", offset:0.7, width:3, direction:"left"}, {wall:"south", offset:0.05, width:3, direction:"right"}],
+          windows:[{wall:"north", offset:0.1, width:5}, {wall:"west", offset:0.3, width:3}],
+          lighting:[{x:0.5, y:0.5, type:"ceiling"}] },
+        { name:"Kitchen",        x:18, y:0,  width:14, depth:12, sqft:168, notes:"Island, open to dining",
+          doors:[],
+          windows:[{wall:"north", offset:0.2, width:3}],
+          lighting:[{x:0.3, y:0.5, type:"recessed"},{x:0.7, y:0.5, type:"recessed"}] },
+        { name:"Dining",         x:18, y:12, width:14, depth:10, sqft:140, notes:"Bay window, adjacent to kitchen",
+          doors:[{wall:"west", offset:0.2, width:3, direction:"right"}],
+          windows:[{wall:"east", offset:0.2, width:4},{wall:"south", offset:0.3, width:3}],
+          lighting:[{x:0.5, y:0.5, type:"ceiling"}] },
+        { name:"Master Bedroom", x:0,  y:16, width:14, depth:14, sqft:196, notes:"Private west wing",
+          doors:[{wall:"north", offset:0.6, width:3, direction:"left"}],
+          windows:[{wall:"west", offset:0.2, width:3},{wall:"south", offset:0.3, width:3}],
+          lighting:[{x:0.5, y:0.5, type:"fan"}] },
+        { name:"Master Bath",    x:14, y:16, width:9,  depth:9,  sqft:81,  notes:"Walk-in shower, double vanity",
+          doors:[{wall:"west", offset:0.15, width:2.8, direction:"right"}],
+          windows:[{wall:"south", offset:0.5, width:2}],
+          lighting:[{x:0.5, y:0.5, type:"ceiling"}] },
+        { name:"Bedroom 2",      x:0,  y:30, width:12, depth:12, sqft:144, notes:"Kids room, east-facing",
+          doors:[{wall:"north", offset:0.6, width:3, direction:"left"}],
+          windows:[{wall:"west", offset:0.3, width:3},{wall:"south", offset:0.3, width:3}],
+          lighting:[{x:0.5, y:0.5, type:"ceiling"}] },
+        { name:"Bedroom 3",      x:12, y:30, width:12, depth:12, sqft:144, notes:"Kids room",
+          doors:[{wall:"north", offset:0.1, width:3, direction:"right"}],
+          windows:[{wall:"east", offset:0.3, width:3},{wall:"south", offset:0.3, width:3}],
+          lighting:[{x:0.5, y:0.5, type:"ceiling"}] },
+        { name:"Full Bath",      x:23, y:16, width:9,  depth:8,  sqft:72,  notes:"Shared kids bath",
+          doors:[{wall:"west", offset:0.1, width:2.8, direction:"right"}],
+          windows:[{wall:"east", offset:0.4, width:2}],
+          lighting:[{x:0.5, y:0.5, type:"ceiling"}] },
+        { name:"Laundry",        x:23, y:24, width:9,  depth:6,  sqft:54,  notes:"Main floor",
+          doors:[{wall:"west", offset:0.1, width:2.8, direction:"right"}],
+          windows:[],
+          lighting:[{x:0.5, y:0.5, type:"ceiling"}] },
+        { name:"Mudroom",        x:32, y:14, width:8,  depth:10, sqft:80,  notes:"Garage entry",
+          doors:[{wall:"east", offset:0.2, width:3, direction:"right"},{wall:"west", offset:0.5, width:3, direction:"left"}],
+          windows:[],
+          lighting:[{x:0.5, y:0.5, type:"ceiling"}] },
+        { name:"Garage",         x:32, y:0,  width:22, depth:14, sqft:308, notes:"2-car attached",
+          doors:[{wall:"south", offset:0.7, width:3, direction:"left"}],
+          windows:[{wall:"north", offset:0.1, width:2},{wall:"east", offset:0.5, width:2}],
+          lighting:[{x:0.3, y:0.5, type:"ceiling"},{x:0.7, y:0.5, type:"ceiling"}] },
       ],
       codeCompliance: [
         {icon:"✓", title:"Minimum Room Sizes",  detail:`All bedrooms exceed ${state} IRC minimums of 70 sq ft with 7ft+ ceiling height`},
-        {icon:"✓", title:"Egress Windows",       detail:"All sleeping rooms have IRC R310-compliant egress windows"},
-        {icon:"✓", title:"Fire Safety",          detail:"Smoke detectors per NFPA 72 on every floor and in each bedroom"},
+        {icon:"✓", title:"Egress Windows",       detail:"All sleeping rooms have IRC R310-compliant egress windows on exterior walls"},
+        {icon:"✓", title:"Fire Safety",          detail:"Smoke detectors per NFPA 72 in each bedroom and common area"},
         {icon:"✓", title:"Visitability",         detail:"36\" doorways, zero-step entry, and accessible main bath included"}
       ],
-      localCodeNote: `${city || state} requires a minimum 5-foot side setback. This design's 50-foot width fits standard lots with room to spare.`
+      localCodeNote: `${city || state} requires a minimum 5-foot side setback. This design's 54-foot width fits standard lots.`
     };
   }
 
@@ -1361,52 +1429,193 @@ Please respond with ONLY a valid JSON object (no markdown, no extra text) with t
   function drawBlueprint(plan) {
     const svg   = document.getElementById('bp-svg');
     const rooms = plan.rooms || [];
-    const scale = 9;
-    const positions = [];
-    let cx = 40, cy = 50, rowMax = 0;
-    const half = Math.ceil(rooms.length / 2);
-    rooms.forEach((room, i) => {
-      const w = Math.min(room.width * scale, 150);
-      const h = Math.min(room.depth * scale, 120);
-      if (i === half) { cx = 40; cy += rowMax + 10; rowMax = 0; }
-      positions.push({ x: cx, y: cy, w, h, room });
-      cx += w + 8;
-      if (h > rowMax) rowMax = h;
+    if (!rooms.length) { svg.innerHTML = ''; return; }
+
+    // ── Compute bounds & scale ────────────────────────────────────────────
+    let maxX = 0, maxY = 0;
+    rooms.forEach(r => {
+      maxX = Math.max(maxX, (r.x||0) + (r.width||10));
+      maxY = Math.max(maxY, (r.y||0) + (r.depth||10));
+    });
+    const PAD = 3, SVG_W = 720, SVG_H = 450, TITLE_H = 32;
+    const scale = Math.min((SVG_W - 60) / (maxX + PAD*2), (SVG_H - TITLE_H - 40) / (maxY + PAD*2));
+    const offX  = (SVG_W - maxX * scale) / 2;
+    const offY  = TITLE_H + PAD * scale;
+    const WALL  = Math.max(2.5, scale * 0.45);
+    const px = x => offX + x * scale;
+    const py = y => offY + y * scale;
+    const ps = f => f * scale;
+
+    // Colours
+    const WALL_C   = 'rgba(143,200,160,0.9)';
+    const WIN_C    = 'rgba(120,190,255,0.9)';
+    const DOOR_C   = 'rgba(200,235,210,0.75)';
+    const LIGHT_C  = 'rgba(255,238,130,0.8)';
+    const FILL_C   = 'rgba(102,140,102,0.09)';
+    const DIM_C    = 'rgba(143,175,154,0.7)';
+    const LABEL_C  = 'rgba(200,240,210,0.92)';
+
+    let h = `<rect width="750" height="480" fill="#060e1e" rx="8"/>`;
+    h += `<text x="375" y="20" text-anchor="middle" fill="${LABEL_C}" font-family="Cormorant,serif" font-size="13" letter-spacing="1">${(plan.title||'FLOOR PLAN').toUpperCase()}</text>`;
+    h += `<line x1="40" y1="27" x2="710" y2="27" stroke="rgba(143,175,154,0.3)" stroke-width="1"/>`;
+
+    // ── 1. Room fills ─────────────────────────────────────────────────────
+    rooms.forEach(r => {
+      h += `<rect x="${px(r.x||0)}" y="${py(r.y||0)}" width="${ps(r.width||10)}" height="${ps(r.depth||10)}" fill="${FILL_C}"/>`;
     });
 
-    let svgContent = `
-      <rect x="0" y="0" width="750" height="480" fill="#060e1e" rx="8"/>
-      <text x="375" y="22" class="title-text" text-anchor="middle">${(plan.title||'FLOOR PLAN').toUpperCase()} — ${plan.totalSqft?.toLocaleString() || ''} SQ FT</text>
-      <line x1="40" y1="28" x2="710" y2="28" stroke="rgba(100,160,255,0.25)" stroke-width="1"/>
-    `;
+    // ── 2. Walls with door/window gaps ───────────────────────────────────
+    rooms.forEach(r => {
+      const rx = px(r.x||0), ry = py(r.y||0);
+      const rw = ps(r.width||10), rh = ps(r.depth||10);
+      const doors   = r.doors   || [];
+      const windows = r.windows || [];
 
-    positions.forEach(p => {
-      const mid_x   = p.x + p.w / 2;
-      const mid_y   = p.y + p.h / 2;
-      const shortName = p.room.name.length > 16 ? p.room.name.substring(0, 14) + '…' : p.room.name;
-      svgContent += `
-        <rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" class="room-fill" rx="2"/>
-        <rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" class="room-stroke" rx="2"/>
-        <text x="${mid_x}" y="${mid_y - 6}" class="room-label">${shortName}</text>
-        <text x="${mid_x}" y="${mid_y + 9}" class="dim-text">${p.room.width}′ × ${p.room.depth}′</text>
-        <text x="${mid_x}" y="${mid_y + 21}" class="dim-text">${p.room.sqft} sf</text>
-        <path d="M${p.x},${p.y + p.h - 18} L${p.x + 18},${p.y + p.h - 18}" class="door-arc"/>
-        <path d="M${p.x},${p.y + p.h - 18} A18,18 0 0,1 ${p.x + 18},${p.y + p.h}" class="door-arc"/>
-      `;
+      // For each wall, collect openings, sort, draw segments
+      const wallDefs = {
+        north: { horiz:true,  startX:rx,    startY:ry,    len:rw },
+        south: { horiz:true,  startX:rx,    startY:ry+rh, len:rw },
+        west:  { horiz:false, startX:rx,    startY:ry,    len:rh },
+        east:  { horiz:false, startX:rx+rw, startY:ry,    len:rh },
+      };
+
+      ['north','south','west','east'].forEach(wallName => {
+        const w    = wallDefs[wallName];
+        const ops  = [];
+        doors.filter(d => d.wall === wallName).forEach(d => {
+          const s = (d.offset||0) * w.len;
+          ops.push({ s, e: s + ps(d.width||2.8) });
+        });
+        windows.filter(win => win.wall === wallName).forEach(win => {
+          const s = (win.offset||0.2) * w.len;
+          ops.push({ s, e: s + ps(win.width||3) });
+        });
+        ops.sort((a,b) => a.s - b.s);
+
+        let cur = 0;
+        const seg = (from, to) => {
+          if (to <= from) return;
+          if (w.horiz) h += `<line x1="${w.startX+from}" y1="${w.startY}" x2="${w.startX+to}" y2="${w.startY}" stroke="${WALL_C}" stroke-width="${WALL}" stroke-linecap="square"/>`;
+          else         h += `<line x1="${w.startX}" y1="${w.startY+from}" x2="${w.startX}" y2="${w.startY+to}" stroke="${WALL_C}" stroke-width="${WALL}" stroke-linecap="square"/>`;
+        };
+        ops.forEach(op => { seg(cur, op.s); cur = op.e; });
+        seg(cur, w.len);
+      });
     });
 
-    svgContent += `
-      <circle cx="700" cy="450" r="16" fill="none" stroke="rgba(100,160,255,0.3)" stroke-width="1"/>
-      <text x="700" y="442" class="dim-text" text-anchor="middle" fill="rgba(100,160,255,0.8)" font-size="11">N</text>
-      <line x1="700" y1="444" x2="700" y2="460" stroke="rgba(100,160,255,0.4)" stroke-width="1"/>
-      <polygon points="700,435 696,444 704,444" fill="rgba(100,160,255,0.5)"/>
-      <line x1="40" y1="460" x2="130" y2="460" stroke="rgba(100,160,255,0.4)" stroke-width="2"/>
-      <line x1="40" y1="455" x2="40"  y2="465" stroke="rgba(100,160,255,0.4)" stroke-width="2"/>
-      <line x1="130" y1="455" x2="130" y2="465" stroke="rgba(100,160,255,0.4)" stroke-width="2"/>
-      <text x="85" y="472" class="scale-text" text-anchor="middle">10 feet</text>
-      <text x="85" y="456" class="scale-text" text-anchor="middle">SCALE 1:20</text>
-    `;
-    svg.innerHTML = svgContent;
+    // ── 3. Window symbols ─────────────────────────────────────────────────
+    rooms.forEach(r => {
+      const rx = px(r.x||0), ry = py(r.y||0);
+      const rw = ps(r.width||10), rh = ps(r.depth||10);
+      (r.windows||[]).forEach(win => {
+        const wPx = ps(win.width||3);
+        const G   = 3; // glass gap px
+        if (win.wall === 'north' || win.wall === 'south') {
+          const wx = rx + (win.offset||0.2) * rw;
+          const wy = win.wall === 'north' ? ry : ry + rh;
+          h += `<line x1="${wx}" y1="${wy-G}" x2="${wx+wPx}" y2="${wy-G}" stroke="${WIN_C}" stroke-width="1"/>`;
+          h += `<line x1="${wx}" y1="${wy}"   x2="${wx+wPx}" y2="${wy}"   stroke="${WIN_C}" stroke-width="2"/>`;
+          h += `<line x1="${wx}" y1="${wy+G}" x2="${wx+wPx}" y2="${wy+G}" stroke="${WIN_C}" stroke-width="1"/>`;
+        } else {
+          const wy = ry + (win.offset||0.2) * rh;
+          const wx = win.wall === 'west' ? rx : rx + rw;
+          h += `<line x1="${wx-G}" y1="${wy}" x2="${wx-G}" y2="${wy+wPx}" stroke="${WIN_C}" stroke-width="1"/>`;
+          h += `<line x1="${wx}"   y1="${wy}" x2="${wx}"   y2="${wy+wPx}" stroke="${WIN_C}" stroke-width="2"/>`;
+          h += `<line x1="${wx+G}" y1="${wy}" x2="${wx+G}" y2="${wy+wPx}" stroke="${WIN_C}" stroke-width="1"/>`;
+        }
+      });
+    });
+
+    // ── 4. Door swings ────────────────────────────────────────────────────
+    rooms.forEach(r => {
+      const rx = px(r.x||0), ry = py(r.y||0);
+      const rw = ps(r.width||10), rh = ps(r.depth||10);
+      (r.doors||[]).forEach(d => {
+        const dPx = ps(d.width||2.8);
+        const isRight = (d.direction||'right') === 'right';
+
+        if (d.wall === 'north') {
+          const hx = rx + (d.offset||0)*rw + (isRight ? 0 : dPx);
+          const dx = isRight ? dPx : -dPx;
+          h += `<line x1="${hx}" y1="${ry}" x2="${hx+dx}" y2="${ry}" stroke="${DOOR_C}" stroke-width="1.5"/>`;
+          h += `<path d="M${hx+dx},${ry} A${dPx},${dPx} 0 0,${isRight?0:1} ${hx},${ry+dPx}" stroke="${DOOR_C}" stroke-width="1" fill="none" stroke-dasharray="4,2"/>`;
+        } else if (d.wall === 'south') {
+          const hx = rx + (d.offset||0)*rw + (isRight ? 0 : dPx);
+          const dx = isRight ? dPx : -dPx;
+          h += `<line x1="${hx}" y1="${ry+rh}" x2="${hx+dx}" y2="${ry+rh}" stroke="${DOOR_C}" stroke-width="1.5"/>`;
+          h += `<path d="M${hx+dx},${ry+rh} A${dPx},${dPx} 0 0,${isRight?1:0} ${hx},${ry+rh-dPx}" stroke="${DOOR_C}" stroke-width="1" fill="none" stroke-dasharray="4,2"/>`;
+        } else if (d.wall === 'west') {
+          const hy = ry + (d.offset||0)*rh + (isRight ? 0 : dPx);
+          const dy = isRight ? dPx : -dPx;
+          h += `<line x1="${rx}" y1="${hy}" x2="${rx}" y2="${hy+dy}" stroke="${DOOR_C}" stroke-width="1.5"/>`;
+          h += `<path d="M${rx},${hy+dy} A${dPx},${dPx} 0 0,${isRight?1:0} ${rx+dPx},${hy}" stroke="${DOOR_C}" stroke-width="1" fill="none" stroke-dasharray="4,2"/>`;
+        } else if (d.wall === 'east') {
+          const hy = ry + (d.offset||0)*rh + (isRight ? 0 : dPx);
+          const dy = isRight ? dPx : -dPx;
+          h += `<line x1="${rx+rw}" y1="${hy}" x2="${rx+rw}" y2="${hy+dy}" stroke="${DOOR_C}" stroke-width="1.5"/>`;
+          h += `<path d="M${rx+rw},${hy+dy} A${dPx},${dPx} 0 0,${isRight?0:1} ${rx+rw-dPx},${hy}" stroke="${DOOR_C}" stroke-width="1" fill="none" stroke-dasharray="4,2"/>`;
+        }
+      });
+    });
+
+    // ── 5. Lighting fixtures ──────────────────────────────────────────────
+    rooms.forEach(r => {
+      const rx = px(r.x||0), ry = py(r.y||0);
+      const rw = ps(r.width||10), rh = ps(r.depth||10);
+      (r.lighting||[]).forEach(l => {
+        const lx = rx + (l.x||0.5)*rw;
+        const ly = ry + (l.y||0.5)*rh;
+        const R  = 7;
+        if (l.type === 'recessed') {
+          h += `<circle cx="${lx}" cy="${ly}" r="${R}" fill="rgba(255,238,130,0.12)" stroke="${LIGHT_C}" stroke-width="1.5"/>`;
+          h += `<circle cx="${lx}" cy="${ly}" r="${R*0.35}" fill="${LIGHT_C}" stroke="none"/>`;
+        } else if (l.type === 'fan') {
+          h += `<circle cx="${lx}" cy="${ly}" r="${R*0.4}" fill="none" stroke="${LIGHT_C}" stroke-width="1.5"/>`;
+          [0,90,180,270].forEach(a => {
+            const rad = a * Math.PI / 180;
+            const bx  = lx + Math.cos(rad)*R*0.85, by = ly + Math.sin(rad)*R*0.85;
+            h += `<ellipse cx="${bx}" cy="${by}" rx="${R*0.45}" ry="${R*0.18}" transform="rotate(${a},${bx},${by})" fill="rgba(255,238,130,0.35)" stroke="${LIGHT_C}" stroke-width="0.8"/>`;
+          });
+          h += `<line x1="${lx}" y1="${ly-R*0.4}" x2="${lx}" y2="${ly+R*0.4}" stroke="${LIGHT_C}" stroke-width="1"/>`;
+        } else {
+          // Standard ceiling fixture: circle + crosshairs
+          h += `<circle cx="${lx}" cy="${ly}" r="${R}" fill="rgba(255,238,130,0.08)" stroke="${LIGHT_C}" stroke-width="1.5"/>`;
+          h += `<line x1="${lx-R}" y1="${ly}"   x2="${lx+R}" y2="${ly}"   stroke="${LIGHT_C}" stroke-width="1"/>`;
+          h += `<line x1="${lx}"   y1="${ly-R}" x2="${lx}"   y2="${ly+R}" stroke="${LIGHT_C}" stroke-width="1"/>`;
+        }
+      });
+    });
+
+    // ── 6. Room labels ────────────────────────────────────────────────────
+    rooms.forEach(r => {
+      const rx = px(r.x||0), ry = py(r.y||0);
+      const rw = ps(r.width||10), rh = ps(r.depth||10);
+      const cx = rx + rw/2, cy = ry + rh/2;
+      const fs = Math.max(7, Math.min(11, rw/9));
+      if (rw > 38 && rh > 24) {
+        h += `<text x="${cx}" y="${cy-5}" text-anchor="middle" fill="${LABEL_C}" font-family="PT Serif,serif" font-size="${fs}">${r.name}</text>`;
+        h += `<text x="${cx}" y="${cy+8}" text-anchor="middle" fill="${DIM_C}"   font-family="PT Serif,serif" font-size="${Math.max(6,fs-2)}">${r.width}′×${r.depth}′</text>`;
+      }
+    });
+
+    // ── 7. Compass + scale bar ────────────────────────────────────────────
+    const SB  = 40 + ps(10);
+    h += `<line x1="40" y1="465" x2="${SB}" y2="465" stroke="${DIM_C}" stroke-width="2"/>`;
+    h += `<line x1="40" y1="460" x2="40"   y2="470" stroke="${DIM_C}" stroke-width="2"/>`;
+    h += `<line x1="${SB}" y1="460" x2="${SB}" y2="470" stroke="${DIM_C}" stroke-width="2"/>`;
+    h += `<text x="${(40+SB)/2}" y="476" text-anchor="middle" fill="${DIM_C}" font-family="PT Serif,serif" font-size="8">10 feet</text>`;
+    h += `<circle cx="700" cy="450" r="15" fill="none" stroke="rgba(100,160,255,0.35)" stroke-width="1"/>`;
+    h += `<polygon points="700,434 697,447 700,444 703,447" fill="rgba(100,160,255,0.6)"/>`;
+    h += `<text x="700" y="459" text-anchor="middle" fill="rgba(100,160,255,0.7)" font-family="PT Serif,serif" font-size="8">S</text>`;
+    h += `<text x="700" y="440" text-anchor="middle" fill="rgba(100,160,255,0.9)" font-family="PT Serif,serif" font-size="9" font-weight="bold">N</text>`;
+
+    // ── Legend ────────────────────────────────────────────────────────────
+    const lx = 42, ly = 438;
+    h += `<line x1="${lx}" y1="${ly}" x2="${lx+12}" y2="${ly}" stroke="${WIN_C}" stroke-width="2"/> <text x="${lx+15}" y="${ly+3}" fill="${DIM_C}" font-family="PT Serif,serif" font-size="7">Window</text>`;
+    h += `<line x1="${lx+55}" y1="${ly}" x2="${lx+67}" y2="${ly}" stroke="${DOOR_C}" stroke-width="1.5"/> <text x="${lx+70}" y="${ly+3}" fill="${DIM_C}" font-family="PT Serif,serif" font-size="7">Door swing</text>`;
+    h += `<circle cx="${lx+135}" cy="${ly}" r="4" fill="none" stroke="${LIGHT_C}" stroke-width="1.5"/> <text x="${lx+142}" y="${ly+3}" fill="${DIM_C}" font-family="PT Serif,serif" font-size="7">Light fixture</text>`;
+
+    svg.innerHTML = h;
   }
 
   // ── Exports ───────────────────────────────────────────────────────────────
