@@ -9,7 +9,8 @@
 <!-- Firebase CDN -->
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
+    createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail }
     from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
   import { getFirestore, collection, addDoc, query, orderBy, getDocs, serverTimestamp }
     from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -30,6 +31,7 @@
 
   window._fb = { auth, db, provider, GoogleAuthProvider,
     signInWithPopup, signOut, onAuthStateChanged,
+    createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail,
     collection, addDoc, query, orderBy, getDocs, serverTimestamp };
 
   onAuthStateChanged(auth, user => {
@@ -797,7 +799,7 @@
   </div>
   <nav>
     <div id="auth-signed-out">
-      <button class="btn-nav" onclick="signIn()">Sign In with Google</button>
+      <button class="btn-nav" onclick="document.getElementById('login-screen').style.display='flex'">Sign In</button>
     </div>
     <div id="auth-signed-in">
       <button class="btn-nav ghost" onclick="openPlansDrawer()">My Plans</button>
@@ -811,45 +813,66 @@
 </header>
 
 <!-- ── LOGIN SCREEN ─────────────────────────────────────────── -->
-<div id="login-screen" style="
-  position:fixed; inset:0; z-index:300;
-  background:#fefdfe;
-  display:flex; align-items:center; justify-content:center;
-  font-family:'PT Serif',serif;
-">
-  <div style="
-    background:#f7f5f1; border:1px solid #d8d2c8; border-radius:14px;
-    padding:3rem 2.5rem; max-width:440px; width:90%; text-align:center;
-    box-shadow:0 8px 40px rgba(51,90,58,0.12);
-    position:relative; overflow:hidden;
-  ">
-    <!-- Blueprint grid decoration -->
+<div id="login-screen" style="position:fixed;inset:0;z-index:300;background:#fefdfe;display:flex;align-items:center;justify-content:center;font-family:'PT Serif',serif;">
+  <div style="background:#f7f5f1;border:1px solid #d8d2c8;border-radius:14px;padding:2.5rem 2.25rem;max-width:420px;width:90%;box-shadow:0 8px 40px rgba(51,90,58,0.12);position:relative;overflow:hidden;">
     <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(51,90,58,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(51,90,58,0.04) 1px,transparent 1px);background-size:32px 32px;pointer-events:none;"></div>
     <div style="position:relative;z-index:1;">
-      <div style="width:52px;height:52px;background:#335a3a;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.6rem;margin:0 auto 1.25rem;">📐</div>
-      <div style="font-family:'Cormorant',serif;font-size:2rem;font-weight:500;color:#335a3a;margin-bottom:.3rem;">Blueprint<span style="color:#668c66;">AI</span></div>
-      <div style="font-size:.78rem;text-transform:uppercase;letter-spacing:.1em;color:#8faf9a;margin-bottom:2rem;font-family:'PT Serif',serif;">AI-Powered Floor Plans</div>
-      <p style="font-size:.9rem;color:#668c66;line-height:1.75;margin-bottom:2rem;font-style:italic;">
-        Describe your home, your family, your life — and get a real, code-compliant floor plan in minutes.
-      </p>
-      <button onclick="signIn()" style="
-        width:100%; background:#335a3a; color:#fefdfe; border:none; border-radius:7px;
-        padding:.9rem 1.5rem; font-family:'Cormorant',serif; font-size:1.05rem;
-        font-weight:500; letter-spacing:.03em; cursor:pointer;
-        display:flex; align-items:center; justify-content:center; gap:.75rem;
-        transition:background .2s; margin-bottom:.85rem;
-      " onmouseover="this.style.background='#2a4830'" onmouseout="this.style.background='#335a3a'">
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+
+      <!-- Branding -->
+      <div style="text-align:center;margin-bottom:1.75rem;">
+        <div style="width:48px;height:48px;background:#335a3a;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;margin:0 auto .9rem;">📐</div>
+        <div style="font-family:'Cormorant',serif;font-size:1.9rem;font-weight:500;color:#335a3a;">Blueprint<span style="color:#668c66;">AI</span></div>
+        <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;color:#8faf9a;margin-top:.2rem;">AI-Powered Floor Plans</div>
+      </div>
+
+      <!-- Tab toggle -->
+      <div style="display:flex;border:1px solid #d8d2c8;border-radius:7px;overflow:hidden;margin-bottom:1.5rem;">
+        <button id="tab-signin" onclick="switchTab('signin')" style="flex:1;padding:.55rem;font-family:'PT Serif',serif;font-size:.82rem;border:none;cursor:pointer;background:#335a3a;color:#fefdfe;font-weight:700;transition:background .15s;">Sign In</button>
+        <button id="tab-signup" onclick="switchTab('signup')" style="flex:1;padding:.55rem;font-family:'PT Serif',serif;font-size:.82rem;border:none;cursor:pointer;background:transparent;color:#668c66;transition:background .15s;">Create Account</button>
+      </div>
+
+      <!-- Error message -->
+      <div id="auth-error" style="display:none;background:rgba(180,50,50,0.08);border:1px solid rgba(180,50,50,0.25);color:#8b2020;border-radius:6px;padding:.55rem .85rem;font-size:.8rem;margin-bottom:1rem;font-family:'PT Serif',serif;"></div>
+
+      <!-- Email/Password form -->
+      <div style="margin-bottom:1rem;">
+        <label style="display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#668c66;margin-bottom:.35rem;">Email</label>
+        <input id="auth-email" type="email" placeholder="you@example.com" style="width:100%;background:#fefdfe;border:1px solid #d8d2c8;border-radius:5px;padding:.65rem .85rem;font-family:'PT Serif',serif;font-size:.9rem;color:#335a3a;outline:none;" onfocus="this.style.borderColor='#668c66'" onblur="this.style.borderColor='#d8d2c8'" onkeydown="if(event.key==='Enter')submitAuth()" />
+      </div>
+      <div style="margin-bottom:1.25rem;">
+        <label style="display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#668c66;margin-bottom:.35rem;">Password</label>
+        <input id="auth-password" type="password" placeholder="••••••••" style="width:100%;background:#fefdfe;border:1px solid #d8d2c8;border-radius:5px;padding:.65rem .85rem;font-family:'PT Serif',serif;font-size:.9rem;color:#335a3a;outline:none;" onfocus="this.style.borderColor='#668c66'" onblur="this.style.borderColor='#d8d2c8'" onkeydown="if(event.key==='Enter')submitAuth()" />
+      </div>
+
+      <!-- Submit button -->
+      <button id="auth-submit-btn" onclick="submitAuth()" style="width:100%;background:#335a3a;color:#fefdfe;border:none;border-radius:7px;padding:.85rem;font-family:'Cormorant',serif;font-size:1.05rem;font-weight:500;letter-spacing:.03em;cursor:pointer;margin-bottom:.75rem;transition:background .2s;" onmouseover="this.style.background='#2a4830'" onmouseout="this.style.background='#335a3a'">
+        Sign In
+      </button>
+
+      <!-- Forgot password -->
+      <div id="forgot-wrap" style="text-align:center;margin-bottom:1rem;">
+        <button onclick="forgotPassword()" style="background:none;border:none;color:#8faf9a;font-family:'PT Serif',serif;font-size:.78rem;cursor:pointer;font-style:italic;text-decoration:underline;">Forgot password?</button>
+      </div>
+
+      <!-- Divider -->
+      <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;">
+        <div style="flex:1;height:1px;background:#d8d2c8;"></div>
+        <span style="font-size:.72rem;color:#8faf9a;font-style:italic;">or</span>
+        <div style="flex:1;height:1px;background:#d8d2c8;"></div>
+      </div>
+
+      <!-- Google -->
+      <button onclick="signIn()" style="width:100%;background:#fefdfe;color:#335a3a;border:1px solid #d8d2c8;border-radius:7px;padding:.8rem;font-family:'PT Serif',serif;font-size:.88rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.7rem;transition:background .2s;margin-bottom:1.25rem;" onmouseover="this.style.background='#f0ede8'" onmouseout="this.style.background='#fefdfe'">
+        <svg width="17" height="17" viewBox="0 0 18 18" fill="none">
           <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908C16.658 14.121 17.64 11.834 17.64 9.2z" fill="#4285F4"/>
           <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z" fill="#34A853"/>
           <path d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957C.347 6.175 0 7.55 0 9s.348 2.825.957 4.039l3.007-2.332z" fill="#FBBC05"/>
           <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z" fill="#EA4335"/>
         </svg>
-        Sign in with Google
+        Continue with Google
       </button>
-      <p style="font-size:.72rem;color:#8faf9a;font-style:italic;line-height:1.6;">
-        Your plans are saved securely to your account.<br>No credit card required to sign in.
-      </p>
+
+      <p style="text-align:center;font-size:.7rem;color:#8faf9a;font-style:italic;line-height:1.6;">Your plans are saved securely to your account.</p>
     </div>
   </div>
 </div>
@@ -1116,6 +1139,7 @@
 <script>
   let selectedType = null;
   let currentPlan  = null;
+  let _authTab     = 'signin';
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   function updateAuthUI(user) {
@@ -1150,6 +1174,71 @@
   async function doSignOut() {
     if (!window._fb) return;
     await window._fb.signOut(window._fb.auth);
+  }
+
+  function switchTab(tab) {
+    _authTab = tab;
+    const isSignIn = tab === 'signin';
+    const tsi = document.getElementById('tab-signin');
+    const tsu = document.getElementById('tab-signup');
+    tsi.style.background = isSignIn ? '#335a3a' : 'transparent';
+    tsi.style.color      = isSignIn ? '#fefdfe' : '#668c66';
+    tsi.style.fontWeight = isSignIn ? '700' : '400';
+    tsu.style.background = isSignIn ? 'transparent' : '#335a3a';
+    tsu.style.color      = isSignIn ? '#668c66' : '#fefdfe';
+    tsu.style.fontWeight = isSignIn ? '400' : '700';
+    document.getElementById('auth-submit-btn').textContent = isSignIn ? 'Sign In' : 'Create Account';
+    document.getElementById('forgot-wrap').style.display   = isSignIn ? 'block' : 'none';
+    document.getElementById('auth-error').style.display    = 'none';
+  }
+
+  function showAuthError(msg) {
+    const el = document.getElementById('auth-error');
+    el.textContent = msg;
+    el.style.display = msg ? 'block' : 'none';
+  }
+
+  async function submitAuth() {
+    if (!window._fb) return;
+    const email    = document.getElementById('auth-email').value.trim();
+    const password = document.getElementById('auth-password').value;
+    if (!email || !password) { showAuthError('Please enter your email and password.'); return; }
+    showAuthError('');
+    const btn = document.getElementById('auth-submit-btn');
+    btn.disabled = true;
+    btn.textContent = _authTab === 'signin' ? 'Signing in…' : 'Creating account…';
+    try {
+      if (_authTab === 'signup') {
+        await window._fb.createUserWithEmailAndPassword(window._fb.auth, email, password);
+      } else {
+        await window._fb.signInWithEmailAndPassword(window._fb.auth, email, password);
+      }
+    } catch(e) {
+      const msg =
+        e.code === 'auth/user-not-found'       ? 'No account found with that email.' :
+        e.code === 'auth/wrong-password'        ? 'Incorrect password.' :
+        e.code === 'auth/invalid-credential'    ? 'Incorrect email or password.' :
+        e.code === 'auth/email-already-in-use'  ? 'That email is already registered — sign in instead.' :
+        e.code === 'auth/weak-password'         ? 'Password must be at least 6 characters.' :
+        e.code === 'auth/invalid-email'         ? 'Please enter a valid email address.' :
+        e.message;
+      showAuthError(msg);
+      btn.disabled = false;
+      btn.textContent = _authTab === 'signin' ? 'Sign In' : 'Create Account';
+    }
+  }
+
+  async function forgotPassword() {
+    if (!window._fb) return;
+    const email = document.getElementById('auth-email').value.trim();
+    if (!email) { showAuthError('Enter your email address above, then click Forgot password.'); return; }
+    try {
+      await window._fb.sendPasswordResetEmail(window._fb.auth, email);
+      showAuthError('');
+      showExportToast('Password reset email sent — check your inbox.');
+    } catch(e) {
+      showAuthError('Could not send reset email: ' + e.message);
+    }
   }
 
   // ── Save Plan ─────────────────────────────────────────────────────────────
