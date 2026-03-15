@@ -908,6 +908,40 @@
     </div>
   </div>
 
+  <!-- UPLOAD EXISTING BLUEPRINT -->
+  <div class="card" id="upload-section" style="border-style:dashed;">
+    <div class="card-title">📂 Start from an existing blueprint <span style="font-size:.75rem;font-weight:400;font-style:italic;color:var(--sage);margin-left:.4rem;">Optional</span></div>
+    <div class="card-subtitle">Upload a floor plan image — JPG, PNG, or screenshot. AI will read it and let you describe your desired changes.</div>
+    <div id="bp-upload-area"
+      style="border:2px dashed var(--border);border-radius:8px;padding:2rem 1.5rem;text-align:center;cursor:pointer;transition:border-color .2s;margin-bottom:1rem;"
+      onclick="document.getElementById('bp-file-input').click()"
+      ondragover="event.preventDefault();document.getElementById('bp-upload-area').style.borderColor='var(--sage)'"
+      ondragleave="document.getElementById('bp-upload-area').style.borderColor='var(--border)'"
+      ondrop="handleBpDrop(event)">
+      <div style="font-size:2rem;margin-bottom:.5rem;line-height:1;">🗺️</div>
+      <div style="font-family:'Cormorant',serif;font-size:1.05rem;color:var(--ink);margin-bottom:.25rem;">Drop a blueprint or floor plan image here</div>
+      <div style="font-family:'PT Serif',serif;font-size:.78rem;color:var(--sage);font-style:italic;">or click to browse</div>
+    </div>
+    <input type="file" id="bp-file-input" accept="image/*" style="display:none" onchange="handleBpFile(event)"/>
+
+    <div id="bp-preview" style="display:none;margin-bottom:1rem;">
+      <img id="bp-thumb" style="max-height:180px;border-radius:6px;border:1px solid var(--border);display:block;margin-bottom:.75rem;"/>
+      <div id="bp-analyzing" style="display:none;font-family:'PT Serif',serif;font-size:.85rem;color:var(--sage);font-style:italic;">Analyzing your blueprint…</div>
+      <div id="bp-detected" style="display:none;background:rgba(102,140,102,0.08);border:1px solid rgba(102,140,102,0.2);border-radius:6px;padding:.85rem;font-family:'PT Serif',serif;font-size:.82rem;line-height:1.6;color:var(--ink);"></div>
+    </div>
+
+    <div id="modifications-area" style="display:none;">
+      <div class="field-group" style="margin-bottom:.75rem;">
+        <label>Describe the changes you want made</label>
+        <textarea id="modifications-input" placeholder="e.g. Move the master bedroom to the south side, make the kitchen 3 feet wider, add a mudroom off the garage, add a walk-in closet to bedroom 2, open up the living and dining area…" style="min-height:90px;"></textarea>
+      </div>
+      <div style="display:flex;align-items:center;gap:.75rem;">
+        <button onclick="clearBpUpload()" style="padding:.4rem .9rem;border-radius:5px;font-family:'PT Serif',serif;font-size:.78rem;border:1px solid var(--border);background:transparent;color:var(--sage);cursor:pointer;">✕ Clear Upload</button>
+        <span style="font-family:'PT Serif',serif;font-size:.78rem;color:var(--sage);font-style:italic;">The AI will use your uploaded plan as the starting point.</span>
+      </div>
+    </div>
+  </div>
+
   <!-- STEP 1: Location -->
   <div class="card" id="step1">
     <div class="card-title">Where is your project located?</div>
@@ -1124,6 +1158,22 @@
 </div><!-- /app-shell -->
 </div><!-- /app-content -->
 
+<!-- PLAN NAMING MODAL -->
+<div id="name-modal" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(51,90,58,0.45);align-items:center;justify-content:center;">
+  <div style="background:#f7f5f1;border:1px solid #d8d2c8;border-radius:12px;padding:2rem 2.25rem;max-width:400px;width:90%;box-shadow:0 8px 30px rgba(51,90,58,0.2);">
+    <div style="font-family:'Cormorant',serif;font-size:1.4rem;font-weight:500;color:#335a3a;margin-bottom:.3rem;">Name Your Plan</div>
+    <div style="font-family:'PT Serif',serif;font-size:.8rem;color:#668c66;font-style:italic;margin-bottom:1.2rem;">Give this floor plan a name so you can find it easily in My Plans.</div>
+    <input id="plan-name-input" type="text" placeholder="e.g. Ranch House — Option A"
+      style="width:100%;background:#fefdfe;border:1px solid #d8d2c8;border-radius:5px;padding:.7rem .9rem;font-family:'Cormorant',serif;font-size:1.05rem;color:#335a3a;outline:none;margin-bottom:1.25rem;"
+      onfocus="this.style.borderColor='#668c66'" onblur="this.style.borderColor='#d8d2c8'"
+      onkeydown="if(event.key==='Enter')confirmSavePlan()"/>
+    <div style="display:flex;gap:.75rem;justify-content:flex-end;">
+      <button onclick="document.getElementById('name-modal').style.display='none'" style="padding:.55rem 1.15rem;border-radius:5px;font-family:'PT Serif',serif;font-size:.85rem;border:1px solid #d8d2c8;background:transparent;color:#668c66;cursor:pointer;">Cancel</button>
+      <button onclick="confirmSavePlan()" style="padding:.55rem 1.4rem;border-radius:5px;font-family:'Cormorant',serif;font-size:1rem;font-weight:500;border:none;background:#335a3a;color:#fefdfe;cursor:pointer;">Save Plan</button>
+    </div>
+  </div>
+</div>
+
 <!-- MY PLANS DRAWER -->
 <div class="drawer-overlay" id="drawer-overlay" onclick="closePlansDrawer()"></div>
 <aside class="drawer" id="plans-drawer">
@@ -1137,9 +1187,10 @@
 </aside>
 
 <script>
-  let selectedType = null;
-  let currentPlan  = null;
-  let _authTab     = 'signin';
+  let selectedType  = null;
+  let currentPlan   = null;
+  let _authTab      = 'signin';
+  let uploadedBpData = null;
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   function updateAuthUI(user) {
@@ -1241,22 +1292,98 @@
     }
   }
 
-  // ── Save Plan ─────────────────────────────────────────────────────────────
-  async function savePlan() {
+  // ── Save Plan (with naming modal) ─────────────────────────────────────────
+  function savePlan() {
+    if (!window._currentUser || !currentPlan) return;
+    const input = document.getElementById('plan-name-input');
+    input.value = currentPlan.title || 'My Floor Plan';
+    const modal = document.getElementById('name-modal');
+    modal.style.display = 'flex';
+    setTimeout(() => { input.select(); input.focus(); }, 80);
+  }
+
+  async function confirmSavePlan() {
     if (!window._currentUser || !window._fb || !currentPlan) return;
+    const name = document.getElementById('plan-name-input').value.trim() || currentPlan.title || 'Untitled Plan';
+    document.getElementById('name-modal').style.display = 'none';
     try {
       const { db, collection, addDoc, serverTimestamp } = window._fb;
       const uid = window._currentUser.uid;
       await addDoc(collection(db, 'plans', uid, 'items'), {
-        title:     currentPlan.title || 'Untitled Plan',
+        title:     name,
         sqft:      currentPlan.totalSqft || 0,
         rooms:     currentPlan.rooms || [],
         compliance:currentPlan.codeCompliance || [],
         summary:   currentPlan.summary || '',
         createdAt: serverTimestamp(),
       });
-      showExportToast('Plan saved to My Plans!');
+      showExportToast('Plan saved: "' + name + '"');
     } catch(e) { showExportToast('Save failed: ' + e.message); }
+  }
+
+  // ── Blueprint Upload ───────────────────────────────────────────────────────
+  function handleBpFile(event) {
+    const file = event.target.files[0];
+    if (file) processBpFile(file);
+  }
+
+  function handleBpDrop(event) {
+    event.preventDefault();
+    document.getElementById('bp-upload-area').style.borderColor = 'var(--border)';
+    const file = event.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) processBpFile(file);
+  }
+
+  function processBpFile(file) {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const base64 = e.target.result.split(',')[1];
+      document.getElementById('bp-thumb').src = e.target.result;
+      document.getElementById('bp-preview').style.display = 'block';
+      document.getElementById('bp-analyzing').style.display = 'block';
+      document.getElementById('bp-detected').style.display = 'none';
+      document.getElementById('modifications-area').style.display = 'none';
+      try {
+        const res  = await fetch('/api/analyze-blueprint', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: base64, mediaType: file.type }),
+        });
+        const data = await res.json();
+        uploadedBpData = data;
+        document.getElementById('bp-analyzing').style.display = 'none';
+        const det = document.getElementById('bp-detected');
+        det.style.display = 'block';
+        const badges = [
+          data.bedrooms   ? `<strong>${data.bedrooms} bed</strong>` : '',
+          data.bathrooms  ? `<strong>${data.bathrooms} bath</strong>` : '',
+          data.totalSqft  ? `<strong>~${Number(data.totalSqft).toLocaleString()} sq ft</strong>` : '',
+          data.stories    ? `<strong>${data.stories} story</strong>` : '',
+        ].filter(Boolean).join(' · ');
+        det.innerHTML = `
+          <div style="font-family:'Cormorant',serif;font-size:1rem;font-weight:500;color:var(--ink);margin-bottom:.3rem;">Blueprint Analyzed ✓</div>
+          ${badges ? `<div style="margin-bottom:.3rem;">${badges}</div>` : ''}
+          ${data.description ? `<div style="font-style:italic;color:var(--sage);font-size:.78rem;">${data.description.slice(0,240)}${data.description.length>240?'…':''}</div>` : ''}`;
+        document.getElementById('modifications-area').style.display = 'block';
+        // Pre-fill description textarea if empty
+        const ta = document.getElementById('description');
+        if (!ta.value && data.description) ta.value = data.description;
+      } catch(err) {
+        document.getElementById('bp-analyzing').style.display = 'none';
+        const det = document.getElementById('bp-detected');
+        det.style.display = 'block';
+        det.innerHTML = `<span style="color:#8b2020;">Could not analyze image: ${err.message}</span>`;
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function clearBpUpload() {
+    uploadedBpData = null;
+    document.getElementById('bp-file-input').value = '';
+    document.getElementById('bp-preview').style.display = 'none';
+    document.getElementById('modifications-area').style.display = 'none';
+    document.getElementById('bp-upload-area').style.borderColor = 'var(--border)';
   }
 
   // ── My Plans Drawer ───────────────────────────────────────────────────────
@@ -1365,63 +1492,163 @@
     const stories    = document.getElementById('stories').value;
     const projectType = selectedType || 'new-home';
 
-    const prompt = `You are an expert residential architect. Generate a detailed, spatially accurate floor plan as JSON.
+    const bpBase = uploadedBpData ? `EXISTING BLUEPRINT TO MODIFY:
+${JSON.stringify(uploadedBpData, null, 2)}
+
+REQUESTED MODIFICATIONS: ${document.getElementById('modifications-input').value.trim() || 'Improve and clean up the layout while keeping the overall character'}
+
+Use the existing blueprint as the foundation. Preserve what works and apply the requested modifications.
+---
+` : '';
+
+    const prompt = `${bpBase}You are a licensed residential architect. Generate a COMPLETE, code-compliant floor plan as JSON.
 
 LOCATION: ${city ? city + ', ' : ''}${state}
 PROJECT TYPE: ${projectType}
-SQUARE FOOTAGE: ${sqft || 'flexible'}
+SQUARE FOOTAGE: ${sqft || 'let the design dictate appropriate size'}
 STORIES: ${stories}
-DESCRIPTION: ${description}
+CLIENT DESCRIPTION: ${description}
 
-Return ONLY a valid JSON object — no markdown, no explanation. Room x,y coordinates are in FEET from the top-left corner. Rooms must share walls (adjacent rooms touch; no floating gaps). Place rooms so they form a real connected floor plan.
+Return ONLY valid JSON — no markdown, no explanation. All measurements in FEET.
+COORDINATE SYSTEM: x = distance from west wall, y = distance from north wall (top-left origin, Y increases southward).
 
 {
   "title": "Descriptive plan name",
-  "totalSqft": 1800,
+  "totalSqft": 1850,
   "bedrooms": 3,
   "bathrooms": 2,
   "stories": 1,
-  "summary": "2-3 sentences describing the design and flow",
+  "exteriorDims": { "width": 54, "depth": 44 },
+  "summary": "3-4 sentences: design concept, room flow, privacy zoning, special features",
+  "localCodeNote": "Specific IRC note for ${state}${city ? ' / ' + city : ''}",
   "rooms": [
     {
       "name": "Living Room",
-      "x": 0, "y": 0,
-      "width": 18, "depth": 16,
+      "x": 0, "y": 0, "w": 18, "d": 16,
       "sqft": 288,
-      "notes": "Open to kitchen",
+      "notes": "Open to kitchen, vaulted ceiling",
+      "exteriorWalls": ["north","west"],
       "doors": [
-        { "wall": "south", "offset": 0.1, "width": 3, "direction": "right" }
+        { "wall": "east", "pos": 6, "width": 3, "swing": "right" }
       ],
       "windows": [
-        { "wall": "north", "offset": 0.1, "width": 5 },
-        { "wall": "west",  "offset": 0.3, "width": 3 }
+        { "wall": "north", "pos": 3, "width": 5 },
+        { "wall": "west",  "pos": 4, "width": 4 }
       ],
-      "lighting": [
-        { "x": 0.5, "y": 0.5, "type": "ceiling" }
+      "closets": [],
+      "fixtures": []
+    },
+    {
+      "name": "Master Bedroom",
+      "x": 0, "y": 22, "w": 14, "d": 14,
+      "sqft": 196,
+      "notes": "Private west wing, walk-in closet",
+      "exteriorWalls": ["west","south"],
+      "doors": [{ "wall": "north", "pos": 8, "width": 3, "swing": "left" }],
+      "windows": [
+        { "wall": "west",  "pos": 4, "width": 3 },
+        { "wall": "south", "pos": 5, "width": 4 }
+      ],
+      "closets": [
+        { "wall": "east", "offset": 1, "width": 6, "depth": 2, "type": "walk-in" }
+      ],
+      "fixtures": []
+    },
+    {
+      "name": "Master Bath",
+      "x": 14, "y": 22, "w": 9, "d": 8,
+      "sqft": 72,
+      "notes": "En-suite, walk-in shower, double vanity",
+      "exteriorWalls": ["south"],
+      "doors": [{ "wall": "west", "pos": 1, "width": 2.8, "swing": "right" }],
+      "windows": [{ "wall": "south", "pos": 3, "width": 2 }],
+      "closets": [],
+      "fixtures": [
+        { "type": "toilet",  "x": 1,   "y": 1   },
+        { "type": "vanity",  "x": 0,   "y": 5,   "width": 5 },
+        { "type": "shower",  "x": 5.5, "y": 1,   "width": 3, "depth": 3 }
+      ]
+    },
+    {
+      "name": "Kitchen",
+      "x": 18, "y": 0, "w": 14, "d": 14,
+      "sqft": 196,
+      "notes": "Open concept, island, work triangle",
+      "exteriorWalls": ["north","east"],
+      "doors": [],
+      "windows": [
+        { "wall": "north", "pos": 4, "width": 3 },
+        { "wall": "east",  "pos": 3, "width": 3 }
+      ],
+      "closets": [],
+      "fixtures": [
+        { "type": "cabinets",     "wall": "north", "offset": 0, "width": 12 },
+        { "type": "cabinets",     "wall": "east",  "offset": 0, "width": 10 },
+        { "type": "range",        "wall": "north", "offset": 3 },
+        { "type": "sink",         "wall": "north", "offset": 8 },
+        { "type": "refrigerator", "wall": "east",  "offset": 0 },
+        { "type": "island",       "x": 3, "y": 5, "width": 5, "depth": 2 }
       ]
     }
   ],
   "codeCompliance": [
-    { "icon": "✓", "title": "Egress Windows", "detail": "All bedrooms have IRC R310-compliant egress windows" }
-  ],
-  "localCodeNote": "Specific code note for ${state}${city ? ' / ' + city : ''}"
+    { "icon": "✓", "title": "Egress Windows", "detail": "All bedrooms have IRC R310 egress windows — min 5.7 sq ft net opening, max 44in sill height" },
+    { "icon": "✓", "title": "Minimum Room Sizes", "detail": "All habitable rooms exceed IRC R304 minimums: 70 sq ft floor area, 7ft min dimension, 7ft ceiling" },
+    { "icon": "✓", "title": "Hallway Widths", "detail": "All hallways meet IRC 36in minimum clear width" },
+    { "icon": "✓", "title": "Bathroom Ventilation", "detail": "All bathrooms have operable windows or mechanical exhaust per IRC R303" },
+    { "icon": "✓", "title": "Smoke & CO Detectors", "detail": "Detectors required per NFPA 72: each bedroom, outside sleeping areas, each level" },
+    { "icon": "✓", "title": "Door Clearances", "detail": "All doors meet IRC minimum 32in clear width; exterior entry doors 36in" }
+  ]
 }
 
-STRICT RULES:
-- x,y = top-left corner of each room in feet. Rooms must be touching (share walls), not floating.
-- Start at x:0, y:0 for the first anchor room. Build outward by adding widths/depths.
-- Include every space: bedrooms, bathrooms, kitchen, living, dining, hallways, laundry, garage, mudroom, etc.
-- doors[].wall: "north" | "south" | "east" | "west"
-- doors[].offset: 0.0–1.0 position along that wall (0 = start, 1 = end)
-- doors[].width: door width in feet (2.8 interior, 3.0 exterior)
-- doors[].direction: "right" | "left" (which side the hinge is on)
-- windows[].wall, windows[].offset, windows[].width (feet)
-- lighting[].x and lighting[].y: 0.0–1.0 within room (0.5,0.5 = center)
-- lighting[].type: "ceiling" | "recessed" | "fan"
-- Exterior walls get windows. Interior walls get doors between rooms.
-- Bedrooms: 1 fan or ceiling light + egress window on an exterior wall.
-- Bathrooms: 1 ceiling light minimum, small privacy window.
-- Kitchen: 2 recessed lights minimum.`;
+MANDATORY ARCHITECTURAL RULES:
+
+ROOM COORDINATES: x,y = top-left corner. w = width (east-west feet). d = depth (north-south feet).
+Adjacent rooms MUST share a wall: if room A has x=0 w=18, room B's east side starts at x=18.
+No floating gaps. Single connected footprint. Every room accounted for.
+
+REQUIRED ROOMS (include all applicable):
+- Entry/Foyer (min 6×8), Living Room (min 12×15=180sqft), Dining, Kitchen (min 10×12)
+- Master Bedroom (min 12×14=168sqft) + Master Bath (min 8×10) + Walk-in Closet
+- Additional Bedrooms (min 10×11=110sqft each) each with reach-in closet (min 4×2ft)
+- Shared Bath(s) (full bath min 5×8, half bath min 5×5)
+- Hallways (min 3ft wide) connecting bedrooms to living areas
+- Laundry Room (min 6×8), Mudroom (if garage attached)
+- Garage: 2-car=min 20×22ft, 1-car=min 12×22ft
+- Pantry optional (3×4 adjacent to kitchen), Linen Closet in hallway (2×3)
+
+EXTERIOR WALLS: List which walls face outside. Exterior walls MUST have windows.
+Interior shared walls get doors connecting rooms. No exterior doors except entry and garage.
+
+DOORS: pos = feet from start of that wall (NOT a ratio).
+widths: interior=2.8ft, exterior entry=3.0ft, closet=2.0ft, bathroom=2.8ft.
+swing: "right" or "left". Every room needs ≥1 door. Hallways connect all bedrooms.
+
+WINDOWS: pos = feet from start of that wall (NOT a ratio). width in feet.
+Bedrooms: ≥1 egress window (min 3ft wide × 4ft tall) on exterior wall.
+Bathrooms: ≥1 small window (min 2ft wide). Kitchen/living: generous windows.
+Never place window within 1ft of a wall corner.
+
+CLOSETS (REQUIRED for every bedroom):
+Master bedroom: walk-in closet (min 6×5ft), type="walk-in"
+Other bedrooms: reach-in closet (min 4×2ft), type="reach-in"
+offset = feet from start of wall where closet begins.
+Hallways: linen closet (2×3) if space allows.
+
+BATHROOM FIXTURES (REQUIRED for every bathroom):
+Full bath: toilet + vanity + tub or shower (or both)
+Half bath: toilet + vanity only
+toilet: x,y in feet from NW corner of room (1ft from each wall minimum)
+vanity: width in feet (single=2.5ft, double=5ft); place along longest wall
+tub: width=2.5ft, depth=5ft; shower: min 3×3ft
+IRC spacing: toilet 15in from centerline to wall, 21in clear in front.
+
+KITCHEN FIXTURES (REQUIRED):
+cabinets: along north and/or east/south walls (depth 1.5ft), offset+width in feet
+range: 2.5ft wide; sink: 2ft wide; refrigerator: 2.5ft wide — all on cabinet walls
+island: only if kitchen ≥ 10ft wide with 42in clearance on all sides
+Work triangle (sink→range→refrigerator) should total ≤ 26ft.`;
+
 
     try {
       // Call our secure proxy — never expose the API key in the browser
@@ -1449,64 +1676,106 @@ STRICT RULES:
   function getDemoData(state, city) {
     return {
       title: "Hillcrest Family Ranch",
-      totalSqft: 1876,
+      totalSqft: 1924,
       bedrooms: 3,
       bathrooms: 2,
       stories: 1,
-      summary: "A single-story ranch with an open kitchen and living core, a private master wing to the west, and two kids' bedrooms sharing a bath to the east. A mudroom off the garage keeps everyday traffic from the main living area.",
+      exteriorDims: { width: 58, depth: 42 },
+      summary: "A single-story ranch with a zoned layout: public living core in the center, private master suite to the west, two kids' bedrooms to the east sharing a hall bath. The kitchen anchors the plan with a full work triangle, island, and direct connection to the dining and living areas. A mudroom off the two-car garage keeps daily traffic out of the main living areas.",
+      localCodeNote: `${city || state} — IRC 2021 with local amendments. Minimum 5 ft side setback; 20 ft front setback. Plan's 58 ft width is compatible with standard 75 ft lots.`,
       rooms: [
-        { name:"Living Room",    x:0,  y:0,  width:18, depth:16, sqft:288, notes:"Open to kitchen, vaulted ceiling",
-          doors:[{wall:"east", offset:0.7, width:3, direction:"left"}, {wall:"south", offset:0.05, width:3, direction:"right"}],
-          windows:[{wall:"north", offset:0.1, width:5}, {wall:"west", offset:0.3, width:3}],
-          lighting:[{x:0.5, y:0.5, type:"ceiling"}] },
-        { name:"Kitchen",        x:18, y:0,  width:14, depth:12, sqft:168, notes:"Island, open to dining",
+        { name:"Foyer",          x:18,  y:0,  w:8,  d:8,  sqft:64,  notes:"Entry with coat closet",
+          exteriorWalls:["north"],
+          doors:[{wall:"north", pos:2, width:3, swing:"right"}, {wall:"south", pos:2, width:3, swing:"right"}],
+          windows:[{wall:"north", pos:4.5, width:2}],
+          closets:[{wall:"east", offset:1, width:4, depth:2, type:"reach-in"}],
+          fixtures:[] },
+        { name:"Living Room",    x:0,   y:0,  w:18, d:16, sqft:288, notes:"Open to kitchen, vaulted ceiling",
+          exteriorWalls:["north","west"],
+          doors:[{wall:"east", pos:12, width:3, swing:"left"}, {wall:"south", pos:1, width:3, swing:"right"}],
+          windows:[{wall:"north", pos:3, width:5}, {wall:"north", pos:11, width:4}, {wall:"west", pos:4, width:4}],
+          closets:[], fixtures:[] },
+        { name:"Kitchen",        x:26,  y:0,  w:14, d:14, sqft:196, notes:"Work triangle, island, open to dining",
+          exteriorWalls:["north","east"],
           doors:[],
-          windows:[{wall:"north", offset:0.2, width:3}],
-          lighting:[{x:0.3, y:0.5, type:"recessed"},{x:0.7, y:0.5, type:"recessed"}] },
-        { name:"Dining",         x:18, y:12, width:14, depth:10, sqft:140, notes:"Bay window, adjacent to kitchen",
-          doors:[{wall:"west", offset:0.2, width:3, direction:"right"}],
-          windows:[{wall:"east", offset:0.2, width:4},{wall:"south", offset:0.3, width:3}],
-          lighting:[{x:0.5, y:0.5, type:"ceiling"}] },
-        { name:"Master Bedroom", x:0,  y:16, width:14, depth:14, sqft:196, notes:"Private west wing",
-          doors:[{wall:"north", offset:0.6, width:3, direction:"left"}],
-          windows:[{wall:"west", offset:0.2, width:3},{wall:"south", offset:0.3, width:3}],
-          lighting:[{x:0.5, y:0.5, type:"fan"}] },
-        { name:"Master Bath",    x:14, y:16, width:9,  depth:9,  sqft:81,  notes:"Walk-in shower, double vanity",
-          doors:[{wall:"west", offset:0.15, width:2.8, direction:"right"}],
-          windows:[{wall:"south", offset:0.5, width:2}],
-          lighting:[{x:0.5, y:0.5, type:"ceiling"}] },
-        { name:"Bedroom 2",      x:0,  y:30, width:12, depth:12, sqft:144, notes:"Kids room, east-facing",
-          doors:[{wall:"north", offset:0.6, width:3, direction:"left"}],
-          windows:[{wall:"west", offset:0.3, width:3},{wall:"south", offset:0.3, width:3}],
-          lighting:[{x:0.5, y:0.5, type:"ceiling"}] },
-        { name:"Bedroom 3",      x:12, y:30, width:12, depth:12, sqft:144, notes:"Kids room",
-          doors:[{wall:"north", offset:0.1, width:3, direction:"right"}],
-          windows:[{wall:"east", offset:0.3, width:3},{wall:"south", offset:0.3, width:3}],
-          lighting:[{x:0.5, y:0.5, type:"ceiling"}] },
-        { name:"Full Bath",      x:23, y:16, width:9,  depth:8,  sqft:72,  notes:"Shared kids bath",
-          doors:[{wall:"west", offset:0.1, width:2.8, direction:"right"}],
-          windows:[{wall:"east", offset:0.4, width:2}],
-          lighting:[{x:0.5, y:0.5, type:"ceiling"}] },
-        { name:"Laundry",        x:23, y:24, width:9,  depth:6,  sqft:54,  notes:"Main floor",
-          doors:[{wall:"west", offset:0.1, width:2.8, direction:"right"}],
-          windows:[],
-          lighting:[{x:0.5, y:0.5, type:"ceiling"}] },
-        { name:"Mudroom",        x:32, y:14, width:8,  depth:10, sqft:80,  notes:"Garage entry",
-          doors:[{wall:"east", offset:0.2, width:3, direction:"right"},{wall:"west", offset:0.5, width:3, direction:"left"}],
-          windows:[],
-          lighting:[{x:0.5, y:0.5, type:"ceiling"}] },
-        { name:"Garage",         x:32, y:0,  width:22, depth:14, sqft:308, notes:"2-car attached",
-          doors:[{wall:"south", offset:0.7, width:3, direction:"left"}],
-          windows:[{wall:"north", offset:0.1, width:2},{wall:"east", offset:0.5, width:2}],
-          lighting:[{x:0.3, y:0.5, type:"ceiling"},{x:0.7, y:0.5, type:"ceiling"}] },
+          windows:[{wall:"north", pos:4, width:3}, {wall:"east", pos:3, width:3}],
+          closets:[],
+          fixtures:[
+            {type:"cabinets", wall:"north", offset:0, width:12},
+            {type:"cabinets", wall:"east",  offset:0, width:10},
+            {type:"range",        wall:"north", offset:3},
+            {type:"sink",         wall:"north", offset:8},
+            {type:"refrigerator", wall:"east",  offset:0},
+            {type:"island", x:3, y:6, width:5, depth:2}
+          ] },
+        { name:"Dining",         x:18,  y:8,  w:8,  d:14, sqft:112, notes:"Adjacent to kitchen and living",
+          exteriorWalls:[],
+          doors:[{wall:"west", pos:4, width:3, swing:"left"}, {wall:"east", pos:4, width:3, swing:"right"}],
+          windows:[], closets:[], fixtures:[] },
+        { name:"Hallway",        x:0,   y:16, w:4,  d:26, sqft:104, notes:"Main corridor — 4 ft wide",
+          exteriorWalls:["west"],
+          doors:[], windows:[{wall:"west", pos:10, width:2}], closets:[], fixtures:[] },
+        { name:"Master Bedroom", x:4,   y:16, w:14, d:15, sqft:210, notes:"Private suite, walk-in closet",
+          exteriorWalls:["south"],
+          doors:[{wall:"west", pos:8, width:3, swing:"right"}],
+          windows:[{wall:"south", pos:3, width:5}, {wall:"south", pos:9, width:3}],
+          closets:[{wall:"east", offset:1, width:7, depth:2.5, type:"walk-in"}],
+          fixtures:[] },
+        { name:"Master Bath",    x:18,  y:22, w:10, d:9,  sqft:90,  notes:"Double vanity, walk-in shower",
+          exteriorWalls:["south"],
+          doors:[{wall:"west", pos:1, width:2.8, swing:"right"}],
+          windows:[{wall:"south", pos:4, width:2}],
+          closets:[],
+          fixtures:[
+            {type:"toilet", x:1,   y:1},
+            {type:"vanity", x:0,   y:5.5, width:5.5},
+            {type:"shower", x:6.5, y:1,   width:3, depth:3.5}
+          ] },
+        { name:"Bedroom 2",      x:4,   y:30, w:12, d:12, sqft:144, notes:"South-facing, reach-in closet",
+          exteriorWalls:["south","west"],
+          doors:[{wall:"north", pos:7, width:2.8, swing:"left"}],
+          windows:[{wall:"south", pos:3, width:4}, {wall:"west", pos:4, width:3}],
+          closets:[{wall:"east", offset:1, width:5, depth:2, type:"reach-in"}],
+          fixtures:[] },
+        { name:"Bedroom 3",      x:16,  y:30, w:12, d:12, sqft:144, notes:"South-facing, reach-in closet",
+          exteriorWalls:["south","east"],
+          doors:[{wall:"north", pos:1, width:2.8, swing:"right"}],
+          windows:[{wall:"south", pos:3, width:4}, {wall:"east", pos:4, width:3}],
+          closets:[{wall:"west", offset:1, width:5, depth:2, type:"reach-in"}],
+          fixtures:[] },
+        { name:"Hall Bath",      x:4,   y:42, w:9,  d:8,  sqft:72,  notes:"Shared full bath",
+          exteriorWalls:["south"],
+          doors:[{wall:"north", pos:1, width:2.8, swing:"right"}],
+          windows:[{wall:"south", pos:3.5, width:2}],
+          closets:[],
+          fixtures:[
+            {type:"toilet", x:1,   y:1},
+            {type:"vanity", x:0,   y:5,   width:3.5},
+            {type:"tub",    x:4.5, y:1.5, width:2.5, depth:5}
+          ] },
+        { name:"Laundry",        x:28,  y:22, w:8,  d:8,  sqft:64,  notes:"Main floor, near bedrooms",
+          exteriorWalls:["east"],
+          doors:[{wall:"west", pos:1, width:2.8, swing:"left"}],
+          windows:[{wall:"east", pos:2, width:2}],
+          closets:[], fixtures:[] },
+        { name:"Mudroom",        x:36,  y:14, w:8,  d:10, sqft:80,  notes:"Garage entry, bench + hooks",
+          exteriorWalls:[],
+          doors:[{wall:"east", pos:2, width:3, swing:"right"}, {wall:"north", pos:2, width:3, swing:"left"}],
+          windows:[], closets:[], fixtures:[] },
+        { name:"Garage",         x:40,  y:0,  w:22, d:22, sqft:484, notes:"2-car attached",
+          exteriorWalls:["north","east","south"],
+          doors:[{wall:"south", pos:16, width:2.8, swing:"left"}],
+          windows:[{wall:"north", pos:1, width:3}, {wall:"east", pos:8, width:2}],
+          closets:[], fixtures:[] },
       ],
       codeCompliance: [
-        {icon:"✓", title:"Minimum Room Sizes",  detail:`All bedrooms exceed ${state} IRC minimums of 70 sq ft with 7ft+ ceiling height`},
-        {icon:"✓", title:"Egress Windows",       detail:"All sleeping rooms have IRC R310-compliant egress windows on exterior walls"},
-        {icon:"✓", title:"Fire Safety",          detail:"Smoke detectors per NFPA 72 in each bedroom and common area"},
-        {icon:"✓", title:"Visitability",         detail:"36\" doorways, zero-step entry, and accessible main bath included"}
-      ],
-      localCodeNote: `${city || state} requires a minimum 5-foot side setback. This design's 54-foot width fits standard lots.`
+        {icon:"✓", title:"Egress Windows",      detail:"All bedrooms meet IRC R310: min 5.7 sq ft net opening, max 44 in sill height, min 24 in height × 20 in width"},
+        {icon:"✓", title:"Minimum Room Sizes",  detail:"All habitable rooms exceed IRC R304 minimums: 70 sq ft floor area, 7 ft minimum horizontal dimension, 7 ft ceiling height"},
+        {icon:"✓", title:"Hallway Width",        detail:"Main corridor is 4 ft (48 in) wide — exceeds IRC minimum of 36 in"},
+        {icon:"✓", title:"Bathroom Ventilation",detail:"All bathrooms have operable windows providing >3 sq ft glazing per IRC R303.3; mechanical fan backup recommended"},
+        {icon:"✓", title:"Smoke & CO Detectors",detail:"Required per NFPA 72: inside each bedroom, outside each sleeping area, on each floor level"},
+        {icon:"✓", title:"Bathroom Fixture Clearances", detail:"Toilets: 15 in from centerline to wall, 21 in clear in front. Shower: 30×30 in minimum per IRC P2708"}
+      ]
     };
   }
 
@@ -1536,8 +1805,10 @@ STRICT RULES:
     const tbody = document.getElementById('room-tbody');
     tbody.innerHTML = '';
     (plan.rooms || []).forEach(r => {
+      const rW = r.w || r.width || '?';
+      const rD = r.d || r.depth || '?';
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${r.name}</td><td>${r.width}′ × ${r.depth}′</td><td>${r.sqft} sq ft</td><td><span class="tag">${r.notes}</span></td>`;
+      tr.innerHTML = `<td>${r.name}</td><td>${rW}′ × ${rD}′</td><td>${r.sqft ? r.sqft + ' sq ft' : '—'}</td><td><span class="tag">${r.notes || ''}</span></td>`;
       tbody.appendChild(tr);
     });
 
@@ -1572,189 +1843,314 @@ STRICT RULES:
     const rooms = plan.rooms || [];
     if (!rooms.length) { svg.innerHTML = ''; return; }
 
+    // ── Dimension helpers (support both old width/depth and new w/d) ──────
+    const RW = r => r.w || r.width  || 10;
+    const RD = r => r.d || r.depth  || 10;
+
     // ── Compute bounds & scale ────────────────────────────────────────────
     let maxX = 0, maxY = 0;
     rooms.forEach(r => {
-      maxX = Math.max(maxX, (r.x||0) + (r.width||10));
-      maxY = Math.max(maxY, (r.y||0) + (r.depth||10));
+      maxX = Math.max(maxX, (r.x||0) + RW(r));
+      maxY = Math.max(maxY, (r.y||0) + RD(r));
     });
-    const PAD = 3, SVG_W = 720, SVG_H = 450, TITLE_H = 32;
-    const scale = Math.min((SVG_W - 60) / (maxX + PAD*2), (SVG_H - TITLE_H - 40) / (maxY + PAD*2));
-    const offX  = (SVG_W - maxX * scale) / 2;
-    const offY  = TITLE_H + PAD * scale;
-    const WALL  = Math.max(2.5, scale * 0.45);
+    const SVG_W = 750, SVG_H = 500, TITLE_H = 36, FOOT_H = 55, PAD = 3;
+    const scale = Math.min(
+      (SVG_W - 80) / (maxX + PAD*2),
+      (SVG_H - TITLE_H - FOOT_H) / (maxY + PAD*2)
+    );
+    const offX = (SVG_W - maxX * scale) / 2;
+    const offY = TITLE_H + PAD * scale;
     const px = x => offX + x * scale;
     const py = y => offY + y * scale;
     const ps = f => f * scale;
 
-    // Colours
-    const WALL_C   = 'rgba(143,200,160,0.9)';
-    const WIN_C    = 'rgba(120,190,255,0.9)';
-    const DOOR_C   = 'rgba(200,235,210,0.75)';
-    const LIGHT_C  = 'rgba(255,238,130,0.8)';
-    const FILL_C   = 'rgba(102,140,102,0.09)';
-    const DIM_C    = 'rgba(143,175,154,0.7)';
-    const LABEL_C  = 'rgba(200,240,210,0.92)';
+    // Wall thickness in px (exterior heavier)
+    const WE = Math.max(3.5, scale * 0.6);   // exterior
+    const WI = Math.max(2,   scale * 0.32);  // interior
 
-    let h = `<rect width="750" height="480" fill="#060e1e" rx="8"/>`;
-    h += `<text x="375" y="20" text-anchor="middle" fill="${LABEL_C}" font-family="Cormorant,serif" font-size="13" letter-spacing="1">${(plan.title||'FLOOR PLAN').toUpperCase()}</text>`;
-    h += `<line x1="40" y1="27" x2="710" y2="27" stroke="rgba(143,175,154,0.3)" stroke-width="1"/>`;
+    // Colours
+    const BG      = '#060e1e';
+    const WEXT    = 'rgba(180,230,200,0.97)'; // exterior wall
+    const WINT    = 'rgba(130,185,155,0.85)'; // interior wall
+    const WIN_C   = 'rgba(100,180,255,1)';    // window glass
+    const WIN_F   = 'rgba(100,180,255,0.15)'; // window fill
+    const DOOR_C  = 'rgba(200,240,215,0.85)'; // door swing
+    const FILL_C  = 'rgba(102,140,102,0.08)'; // room fill
+    const CLO_C   = 'rgba(80,110,90,0.22)';   // closet fill
+    const CLO_S   = 'rgba(130,185,155,0.7)';  // closet stroke
+    const FIX_C   = 'rgba(120,190,165,0.8)';  // fixture stroke
+    const FIX_F   = 'rgba(120,190,165,0.12)'; // fixture fill
+    const LABEL   = 'rgba(200,245,215,0.92)';
+    const DIM     = 'rgba(130,175,150,0.75)';
+
+    // ── Opening pixel position helper (handles pos-in-feet or offset 0–1) ─
+    const openPx = (item, wallLenPx) => {
+      if (item.pos  !== undefined) return item.pos * scale;
+      if (item.offset !== undefined && item.offset <= 1.5) return item.offset * wallLenPx; // ratio
+      return (item.offset || 0) * scale; // offset in feet
+    };
+
+    let h = `<rect width="${SVG_W}" height="${SVG_H}" fill="${BG}" rx="8"/>`;
+    h += `<text x="${SVG_W/2}" y="23" text-anchor="middle" fill="${LABEL}" font-family="Cormorant,serif" font-size="13" letter-spacing="1.5">${(plan.title||'FLOOR PLAN').toUpperCase()}</text>`;
+    h += `<line x1="40" y1="31" x2="${SVG_W-40}" y2="31" stroke="rgba(130,175,150,0.25)" stroke-width="1"/>`;
 
     // ── 1. Room fills ─────────────────────────────────────────────────────
     rooms.forEach(r => {
-      h += `<rect x="${px(r.x||0)}" y="${py(r.y||0)}" width="${ps(r.width||10)}" height="${ps(r.depth||10)}" fill="${FILL_C}"/>`;
+      h += `<rect x="${px(r.x||0)}" y="${py(r.y||0)}" width="${ps(RW(r))}" height="${ps(RD(r))}" fill="${FILL_C}"/>`;
     });
 
-    // ── 2. Walls with door/window gaps ───────────────────────────────────
+    // ── 2. Closets ────────────────────────────────────────────────────────
+    rooms.forEach(r => {
+      const rx0 = r.x||0, ry0 = r.y||0;
+      (r.closets||[]).forEach(c => {
+        let cx, cy, cw, cd;
+        const ofs = c.offset || 0;
+        if      (c.wall === 'north') { cx=rx0+ofs; cy=ry0;           cw=c.width||4; cd=c.depth||2; }
+        else if (c.wall === 'south') { cx=rx0+ofs; cy=ry0+RD(r)-( c.depth||2); cw=c.width||4; cd=c.depth||2; }
+        else if (c.wall === 'west')  { cx=rx0;     cy=ry0+ofs;       cw=c.depth||2; cd=c.width||4; }
+        else if (c.wall === 'east')  { cx=rx0+RW(r)-(c.depth||2); cy=ry0+ofs; cw=c.depth||2; cd=c.width||4; }
+        else return;
+        const cpx=px(cx), cpy=py(cy), cpw=ps(cw), cpd=ps(cd);
+        h += `<rect x="${cpx}" y="${cpy}" width="${cpw}" height="${cpd}" fill="${CLO_C}" stroke="${CLO_S}" stroke-width="1.5"/>`;
+        // Hanging rod with end circles
+        const isHoriz = (c.wall === 'north' || c.wall === 'south');
+        if (isHoriz) {
+          const ry2 = cpy + cpd*0.55;
+          h += `<line x1="${cpx+4}" y1="${ry2}" x2="${cpx+cpw-4}" y2="${ry2}" stroke="${CLO_S}" stroke-width="2"/>`;
+          h += `<circle cx="${cpx+4}" cy="${ry2}" r="2.5" fill="${CLO_S}"/>`;
+          h += `<circle cx="${cpx+cpw-4}" cy="${ry2}" r="2.5" fill="${CLO_S}"/>`;
+        } else {
+          const rx2 = cpx + cpw*0.55;
+          h += `<line x1="${rx2}" y1="${cpy+4}" x2="${rx2}" y2="${cpy+cpd-4}" stroke="${CLO_S}" stroke-width="2"/>`;
+          h += `<circle cx="${rx2}" cy="${cpy+4}" r="2.5" fill="${CLO_S}"/>`;
+          h += `<circle cx="${rx2}" cy="${cpy+cpd-4}" r="2.5" fill="${CLO_S}"/>`;
+        }
+        // Closet label
+        const cLabel = c.type==='walk-in' ? 'WIC' : 'CLO';
+        const cfs = Math.max(6, Math.min(9, cpw/5));
+        if (cpw > 24 && cpd > 14) {
+          h += `<text x="${cpx+cpw/2}" y="${cpy+cpd/2+3}" text-anchor="middle" fill="${LABEL}" font-family="PT Serif,serif" font-size="${cfs}" opacity="0.7">${cLabel}</text>`;
+        }
+      });
+    });
+
+    // ── 3. Walls with door/window gaps ───────────────────────────────────
     rooms.forEach(r => {
       const rx = px(r.x||0), ry = py(r.y||0);
-      const rw = ps(r.width||10), rh = ps(r.depth||10);
-      const doors   = r.doors   || [];
-      const windows = r.windows || [];
+      const rw = ps(RW(r)), rd = ps(RD(r));
+      const extWalls = r.exteriorWalls || [];
+      const doors    = r.doors   || [];
+      const windows  = r.windows || [];
 
-      // For each wall, collect openings, sort, draw segments
       const wallDefs = {
-        north: { horiz:true,  startX:rx,    startY:ry,    len:rw },
-        south: { horiz:true,  startX:rx,    startY:ry+rh, len:rw },
-        west:  { horiz:false, startX:rx,    startY:ry,    len:rh },
-        east:  { horiz:false, startX:rx+rw, startY:ry,    len:rh },
+        north: { horiz:true,  x0:rx,    y0:ry,    len:rw },
+        south: { horiz:true,  x0:rx,    y0:ry+rd, len:rw },
+        west:  { horiz:false, x0:rx,    y0:ry,    len:rd },
+        east:  { horiz:false, x0:rx+rw, y0:ry,    len:rd },
       };
 
-      ['north','south','west','east'].forEach(wallName => {
-        const w    = wallDefs[wallName];
-        const ops  = [];
-        doors.filter(d => d.wall === wallName).forEach(d => {
-          const s = (d.offset||0) * w.len;
-          ops.push({ s, e: s + ps(d.width||2.8) });
+      ['north','south','west','east'].forEach(wn => {
+        const w     = wallDefs[wn];
+        const isExt = extWalls.includes(wn);
+        const wCol  = isExt ? WEXT : WINT;
+        const wW    = isExt ? WE   : WI;
+        const ops   = [];
+
+        doors.filter(d => d.wall===wn).forEach(d => {
+          const s = openPx(d, w.len);
+          ops.push({s, e: s + ps(d.width||2.8), type:'door'});
         });
-        windows.filter(win => win.wall === wallName).forEach(win => {
-          const s = (win.offset||0.2) * w.len;
-          ops.push({ s, e: s + ps(win.width||3) });
+        windows.filter(win => win.wall===wn).forEach(win => {
+          const s = openPx(win, w.len);
+          ops.push({s, e: s + ps(win.width||3), type:'win'});
         });
-        ops.sort((a,b) => a.s - b.s);
+        ops.sort((a,b)=>a.s-b.s);
 
         let cur = 0;
         const seg = (from, to) => {
           if (to <= from) return;
-          if (w.horiz) h += `<line x1="${w.startX+from}" y1="${w.startY}" x2="${w.startX+to}" y2="${w.startY}" stroke="${WALL_C}" stroke-width="${WALL}" stroke-linecap="square"/>`;
-          else         h += `<line x1="${w.startX}" y1="${w.startY+from}" x2="${w.startX}" y2="${w.startY+to}" stroke="${WALL_C}" stroke-width="${WALL}" stroke-linecap="square"/>`;
+          if (w.horiz) h += `<line x1="${w.x0+from}" y1="${w.y0}" x2="${w.x0+to}" y2="${w.y0}" stroke="${wCol}" stroke-width="${wW}" stroke-linecap="square"/>`;
+          else         h += `<line x1="${w.x0}" y1="${w.y0+from}" x2="${w.x0}" y2="${w.y0+to}" stroke="${wCol}" stroke-width="${wW}" stroke-linecap="square"/>`;
         };
         ops.forEach(op => { seg(cur, op.s); cur = op.e; });
         seg(cur, w.len);
       });
     });
 
-    // ── 3. Window symbols ─────────────────────────────────────────────────
+    // ── 4. Window glass symbols ───────────────────────────────────────────
     rooms.forEach(r => {
       const rx = px(r.x||0), ry = py(r.y||0);
-      const rw = ps(r.width||10), rh = ps(r.depth||10);
+      const rw = ps(RW(r)), rd = ps(RD(r));
       (r.windows||[]).forEach(win => {
         const wPx = ps(win.width||3);
-        const G   = 3; // glass gap px
-        if (win.wall === 'north' || win.wall === 'south') {
-          const wx = rx + (win.offset||0.2) * rw;
-          const wy = win.wall === 'north' ? ry : ry + rh;
-          h += `<line x1="${wx}" y1="${wy-G}" x2="${wx+wPx}" y2="${wy-G}" stroke="${WIN_C}" stroke-width="1"/>`;
-          h += `<line x1="${wx}" y1="${wy}"   x2="${wx+wPx}" y2="${wy}"   stroke="${WIN_C}" stroke-width="2"/>`;
-          h += `<line x1="${wx}" y1="${wy+G}" x2="${wx+wPx}" y2="${wy+G}" stroke="${WIN_C}" stroke-width="1"/>`;
+        const G = 3.5;
+        if (win.wall==='north'||win.wall==='south') {
+          const wx = rx + openPx(win, rw);
+          const wy = win.wall==='north' ? ry : ry+rd;
+          h += `<rect x="${wx}" y="${wy-G}" width="${wPx}" height="${G*2}" fill="${WIN_F}"/>`;
+          h += `<line x1="${wx}" y1="${wy-G}" x2="${wx+wPx}" y2="${wy-G}" stroke="${WIN_C}" stroke-width="1.2"/>`;
+          h += `<line x1="${wx}" y1="${wy}"   x2="${wx+wPx}" y2="${wy}"   stroke="${WIN_C}" stroke-width="2.5"/>`;
+          h += `<line x1="${wx}" y1="${wy+G}" x2="${wx+wPx}" y2="${wy+G}" stroke="${WIN_C}" stroke-width="1.2"/>`;
         } else {
-          const wy = ry + (win.offset||0.2) * rh;
-          const wx = win.wall === 'west' ? rx : rx + rw;
-          h += `<line x1="${wx-G}" y1="${wy}" x2="${wx-G}" y2="${wy+wPx}" stroke="${WIN_C}" stroke-width="1"/>`;
-          h += `<line x1="${wx}"   y1="${wy}" x2="${wx}"   y2="${wy+wPx}" stroke="${WIN_C}" stroke-width="2"/>`;
-          h += `<line x1="${wx+G}" y1="${wy}" x2="${wx+G}" y2="${wy+wPx}" stroke="${WIN_C}" stroke-width="1"/>`;
+          const wy = ry + openPx(win, rd);
+          const wx = win.wall==='west' ? rx : rx+rw;
+          h += `<rect x="${wx-G}" y="${wy}" width="${G*2}" height="${wPx}" fill="${WIN_F}"/>`;
+          h += `<line x1="${wx-G}" y1="${wy}" x2="${wx-G}" y2="${wy+wPx}" stroke="${WIN_C}" stroke-width="1.2"/>`;
+          h += `<line x1="${wx}"   y1="${wy}" x2="${wx}"   y2="${wy+wPx}" stroke="${WIN_C}" stroke-width="2.5"/>`;
+          h += `<line x1="${wx+G}" y1="${wy}" x2="${wx+G}" y2="${wy+wPx}" stroke="${WIN_C}" stroke-width="1.2"/>`;
         }
       });
     });
 
-    // ── 4. Door swings ────────────────────────────────────────────────────
+    // ── 5. Door swings ────────────────────────────────────────────────────
     rooms.forEach(r => {
       const rx = px(r.x||0), ry = py(r.y||0);
-      const rw = ps(r.width||10), rh = ps(r.depth||10);
+      const rw = ps(RW(r)), rd = ps(RD(r));
       (r.doors||[]).forEach(d => {
         const dPx = ps(d.width||2.8);
-        const isRight = (d.direction||'right') === 'right';
-
-        if (d.wall === 'north') {
-          const hx = rx + (d.offset||0)*rw + (isRight ? 0 : dPx);
-          const dx = isRight ? dPx : -dPx;
-          h += `<line x1="${hx}" y1="${ry}" x2="${hx+dx}" y2="${ry}" stroke="${DOOR_C}" stroke-width="1.5"/>`;
-          h += `<path d="M${hx+dx},${ry} A${dPx},${dPx} 0 0,${isRight?0:1} ${hx},${ry+dPx}" stroke="${DOOR_C}" stroke-width="1" fill="none" stroke-dasharray="4,2"/>`;
-        } else if (d.wall === 'south') {
-          const hx = rx + (d.offset||0)*rw + (isRight ? 0 : dPx);
-          const dx = isRight ? dPx : -dPx;
-          h += `<line x1="${hx}" y1="${ry+rh}" x2="${hx+dx}" y2="${ry+rh}" stroke="${DOOR_C}" stroke-width="1.5"/>`;
-          h += `<path d="M${hx+dx},${ry+rh} A${dPx},${dPx} 0 0,${isRight?1:0} ${hx},${ry+rh-dPx}" stroke="${DOOR_C}" stroke-width="1" fill="none" stroke-dasharray="4,2"/>`;
-        } else if (d.wall === 'west') {
-          const hy = ry + (d.offset||0)*rh + (isRight ? 0 : dPx);
-          const dy = isRight ? dPx : -dPx;
-          h += `<line x1="${rx}" y1="${hy}" x2="${rx}" y2="${hy+dy}" stroke="${DOOR_C}" stroke-width="1.5"/>`;
-          h += `<path d="M${rx},${hy+dy} A${dPx},${dPx} 0 0,${isRight?1:0} ${rx+dPx},${hy}" stroke="${DOOR_C}" stroke-width="1" fill="none" stroke-dasharray="4,2"/>`;
-        } else if (d.wall === 'east') {
-          const hy = ry + (d.offset||0)*rh + (isRight ? 0 : dPx);
-          const dy = isRight ? dPx : -dPx;
-          h += `<line x1="${rx+rw}" y1="${hy}" x2="${rx+rw}" y2="${hy+dy}" stroke="${DOOR_C}" stroke-width="1.5"/>`;
-          h += `<path d="M${rx+rw},${hy+dy} A${dPx},${dPx} 0 0,${isRight?0:1} ${rx+rw-dPx},${hy}" stroke="${DOOR_C}" stroke-width="1" fill="none" stroke-dasharray="4,2"/>`;
-        }
+        const isR = (d.swing||d.direction||'right')==='right';
+        const drawDoor = (hx, hy, wall) => {
+          if (wall==='north') {
+            const ox = hx + (isR?0:dPx), dx = isR?dPx:-dPx;
+            h += `<line x1="${ox}" y1="${hy}" x2="${ox+dx}" y2="${hy}" stroke="${DOOR_C}" stroke-width="1.8"/>`;
+            h += `<path d="M${ox+dx},${hy} A${dPx},${dPx} 0 0,${isR?0:1} ${ox},${hy+dPx}" stroke="${DOOR_C}" stroke-width="1" fill="none" stroke-dasharray="3,2"/>`;
+          } else if (wall==='south') {
+            const ox = hx + (isR?0:dPx), dx = isR?dPx:-dPx;
+            h += `<line x1="${ox}" y1="${hy}" x2="${ox+dx}" y2="${hy}" stroke="${DOOR_C}" stroke-width="1.8"/>`;
+            h += `<path d="M${ox+dx},${hy} A${dPx},${dPx} 0 0,${isR?1:0} ${ox},${hy-dPx}" stroke="${DOOR_C}" stroke-width="1" fill="none" stroke-dasharray="3,2"/>`;
+          } else if (wall==='west') {
+            const oy = hy + (isR?0:dPx), dy = isR?dPx:-dPx;
+            h += `<line x1="${hx}" y1="${oy}" x2="${hx}" y2="${oy+dy}" stroke="${DOOR_C}" stroke-width="1.8"/>`;
+            h += `<path d="M${hx},${oy+dy} A${dPx},${dPx} 0 0,${isR?1:0} ${hx+dPx},${oy}" stroke="${DOOR_C}" stroke-width="1" fill="none" stroke-dasharray="3,2"/>`;
+          } else if (wall==='east') {
+            const oy = hy + (isR?0:dPx), dy = isR?dPx:-dPx;
+            h += `<line x1="${hx}" y1="${oy}" x2="${hx}" y2="${oy+dy}" stroke="${DOOR_C}" stroke-width="1.8"/>`;
+            h += `<path d="M${hx},${oy+dy} A${dPx},${dPx} 0 0,${isR?0:1} ${hx-dPx},${oy}" stroke="${DOOR_C}" stroke-width="1" fill="none" stroke-dasharray="3,2"/>`;
+          }
+        };
+        if (d.wall==='north') drawDoor(rx + openPx(d, rw), ry, 'north');
+        else if (d.wall==='south') drawDoor(rx + openPx(d, rw), ry+rd, 'south');
+        else if (d.wall==='west')  drawDoor(rx, ry + openPx(d, rd), 'west');
+        else if (d.wall==='east')  drawDoor(rx+rw, ry + openPx(d, rd), 'east');
       });
     });
 
-    // ── 5. Lighting fixtures ──────────────────────────────────────────────
+    // ── 6. Fixtures (bathroom & kitchen) ─────────────────────────────────
     rooms.forEach(r => {
-      const rx = px(r.x||0), ry = py(r.y||0);
-      const rw = ps(r.width||10), rh = ps(r.depth||10);
-      (r.lighting||[]).forEach(l => {
-        const lx = rx + (l.x||0.5)*rw;
-        const ly = ry + (l.y||0.5)*rh;
-        const R  = 7;
-        if (l.type === 'recessed') {
-          h += `<circle cx="${lx}" cy="${ly}" r="${R}" fill="rgba(255,238,130,0.12)" stroke="${LIGHT_C}" stroke-width="1.5"/>`;
-          h += `<circle cx="${lx}" cy="${ly}" r="${R*0.35}" fill="${LIGHT_C}" stroke="none"/>`;
-        } else if (l.type === 'fan') {
-          h += `<circle cx="${lx}" cy="${ly}" r="${R*0.4}" fill="none" stroke="${LIGHT_C}" stroke-width="1.5"/>`;
-          [0,90,180,270].forEach(a => {
-            const rad = a * Math.PI / 180;
-            const bx  = lx + Math.cos(rad)*R*0.85, by = ly + Math.sin(rad)*R*0.85;
-            h += `<ellipse cx="${bx}" cy="${by}" rx="${R*0.45}" ry="${R*0.18}" transform="rotate(${a},${bx},${by})" fill="rgba(255,238,130,0.35)" stroke="${LIGHT_C}" stroke-width="0.8"/>`;
+      const rx0=r.x||0, ry0=r.y||0;
+      (r.fixtures||[]).forEach(f => {
+        // For wall-anchored fixtures, compute pixel position
+        const fxAbs = (f.x!==undefined) ? px(rx0+(f.x||0)) : null;
+        const fyAbs = (f.y!==undefined) ? py(ry0+(f.y||0)) : null;
+
+        if (f.type==='toilet') {
+          const fx=fxAbs||px(rx0+1), fy=fyAbs||py(ry0+1);
+          // Tank
+          h += `<rect x="${fx}" y="${fy}" width="${ps(1.4)}" height="${ps(0.65)}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1.2" rx="2"/>`;
+          // Bowl
+          h += `<ellipse cx="${fx+ps(0.7)}" cy="${fy+ps(1.2)}" rx="${ps(0.62)}" ry="${ps(0.5)}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1.2"/>`;
+
+        } else if (f.type==='vanity') {
+          const fw=ps(f.width||3);
+          let fx2=fxAbs||px(rx0), fy2=fyAbs||py(ry0+RD(r)-1.7);
+          h += `<rect x="${fx2}" y="${fy2}" width="${fw}" height="${ps(1.7)}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1.2" rx="2"/>`;
+          // Sink bowl(s)
+          const bowls = f.width >= 4.5 ? 2 : 1;
+          for(let b=0;b<bowls;b++){
+            h += `<ellipse cx="${fx2+fw*(b+0.5)/bowls}" cy="${fy2+ps(0.85)}" rx="${ps(0.38)}" ry="${ps(0.32)}" fill="none" stroke="${FIX_C}" stroke-width="1"/>`;
+          }
+
+        } else if (f.type==='tub') {
+          const tw=ps(f.width||2.5), td=ps(f.depth||5);
+          h += `<rect x="${fxAbs||px(rx0+1)}" y="${fyAbs||py(ry0+1)}" width="${tw}" height="${td}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1.2" rx="3"/>`;
+          h += `<rect x="${(fxAbs||px(rx0+1))+4}" y="${(fyAbs||py(ry0+1))+4}" width="${tw-8}" height="${td-8}" fill="none" stroke="${FIX_C}" stroke-width="0.8" rx="2"/>`;
+          // Faucet
+          h += `<circle cx="${(fxAbs||px(rx0+1))+tw/2}" cy="${(fyAbs||py(ry0+1))+10}" r="3" fill="${FIX_C}" opacity="0.6"/>`;
+
+        } else if (f.type==='shower') {
+          const sw=ps(f.width||3), sd=ps(f.depth||3);
+          const sx=fxAbs||px(rx0+1), sy=fyAbs||py(ry0+1);
+          h += `<rect x="${sx}" y="${sy}" width="${sw}" height="${sd}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1.2"/>`;
+          h += `<line x1="${sx}" y1="${sy}" x2="${sx+sw}" y2="${sy+sd}" stroke="${FIX_C}" stroke-width="0.7" opacity="0.4"/>`;
+          h += `<line x1="${sx+sw}" y1="${sy}" x2="${sx}" y2="${sy+sd}" stroke="${FIX_C}" stroke-width="0.7" opacity="0.4"/>`;
+          h += `<circle cx="${sx+sw/2}" cy="${sy+sd/2}" r="4" fill="none" stroke="${FIX_C}" stroke-width="1.2"/>`;
+
+        } else if (f.type==='cabinets') {
+          const cw=ps(f.width||8), cd=ps(1.5);
+          const cofs=openPx({pos:f.offset, offset:f.offset}, ps(RW(r)));
+          if (f.wall==='north') h += `<rect x="${px(rx0)+cofs}" y="${py(ry0)}" width="${cw}" height="${cd}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1"/>`;
+          else if (f.wall==='south') h += `<rect x="${px(rx0)+cofs}" y="${py(ry0+RD(r))-cd}" width="${cw}" height="${cd}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1"/>`;
+          else if (f.wall==='west')  h += `<rect x="${px(rx0)}" y="${py(ry0)+cofs}" width="${cd}" height="${cw}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1"/>`;
+          else if (f.wall==='east')  h += `<rect x="${px(rx0+RW(r))-cd}" y="${py(ry0)+cofs}" width="${cd}" height="${cw}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1"/>`;
+
+        } else if (f.type==='range') {
+          const sz=ps(2.5), cd=ps(1.5);
+          const rofs=openPx({pos:f.offset, offset:f.offset}, ps(RW(r)));
+          let fx2=px(rx0)+rofs, fy2=py(ry0);
+          if (f.wall==='south') fy2=py(ry0+RD(r))-cd;
+          if (f.wall==='east')  { fx2=px(rx0+RW(r))-cd; fy2=py(ry0)+rofs; }
+          h += `<rect x="${fx2}" y="${fy2}" width="${sz}" height="${cd}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1.2"/>`;
+          [[0.2,0.35],[0.55,0.35],[0.2,0.75],[0.55,0.75]].forEach(([bx,by])=>{
+            h += `<circle cx="${fx2+sz*bx}" cy="${fy2+cd*by}" r="${sz*0.1}" fill="none" stroke="${FIX_C}" stroke-width="1"/>`;
           });
-          h += `<line x1="${lx}" y1="${ly-R*0.4}" x2="${lx}" y2="${ly+R*0.4}" stroke="${LIGHT_C}" stroke-width="1"/>`;
-        } else {
-          // Standard ceiling fixture: circle + crosshairs
-          h += `<circle cx="${lx}" cy="${ly}" r="${R}" fill="rgba(255,238,130,0.08)" stroke="${LIGHT_C}" stroke-width="1.5"/>`;
-          h += `<line x1="${lx-R}" y1="${ly}"   x2="${lx+R}" y2="${ly}"   stroke="${LIGHT_C}" stroke-width="1"/>`;
-          h += `<line x1="${lx}"   y1="${ly-R}" x2="${lx}"   y2="${ly+R}" stroke="${LIGHT_C}" stroke-width="1"/>`;
+
+        } else if (f.type==='sink') {
+          const sw2=ps(2), sd2=ps(1.5);
+          const sofs=openPx({pos:f.offset, offset:f.offset}, ps(RW(r)));
+          let fx2=px(rx0)+sofs, fy2=py(ry0);
+          if (f.wall==='south') fy2=py(ry0+RD(r))-sd2;
+          if (f.wall==='east')  { fx2=px(rx0+RW(r))-sd2; fy2=py(ry0)+sofs; }
+          h += `<rect x="${fx2}" y="${fy2}" width="${sw2}" height="${sd2}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1.2" rx="2"/>`;
+          h += `<circle cx="${fx2+sw2*0.3}" cy="${fy2+sd2*0.5}" r="${sw2*0.14}" fill="none" stroke="${FIX_C}" stroke-width="0.9"/>`;
+          h += `<circle cx="${fx2+sw2*0.7}" cy="${fy2+sd2*0.5}" r="${sw2*0.14}" fill="none" stroke="${FIX_C}" stroke-width="0.9"/>`;
+
+        } else if (f.type==='refrigerator') {
+          const rw2=ps(2.5), rd2=ps(2.8);
+          const rfofs=openPx({pos:f.offset, offset:f.offset}, ps(RW(r)));
+          let fx2=px(rx0)+rfofs, fy2=py(ry0);
+          if (f.wall==='south') fy2=py(ry0+RD(r))-rd2;
+          if (f.wall==='east')  { fx2=px(rx0+RW(r))-rd2; fy2=py(ry0)+rfofs; }
+          h += `<rect x="${fx2}" y="${fy2}" width="${rw2}" height="${rd2}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1.2" rx="2"/>`;
+          h += `<line x1="${fx2+rw2*0.85}" y1="${fy2+rd2*0.2}" x2="${fx2+rw2*0.85}" y2="${fy2+rd2*0.55}" stroke="${FIX_C}" stroke-width="2"/>`;
+
+        } else if (f.type==='island') {
+          h += `<rect x="${px(rx0+(f.x||0))}" y="${py(ry0+(f.y||0))}" width="${ps(f.width||4)}" height="${ps(f.depth||2)}" fill="rgba(100,150,120,0.15)" stroke="${FIX_C}" stroke-width="1.5" rx="2"/>`;
         }
       });
     });
 
-    // ── 6. Room labels ────────────────────────────────────────────────────
+    // ── 7. Room labels ────────────────────────────────────────────────────
     rooms.forEach(r => {
       const rx = px(r.x||0), ry = py(r.y||0);
-      const rw = ps(r.width||10), rh = ps(r.depth||10);
-      const cx = rx + rw/2, cy = ry + rh/2;
-      const fs = Math.max(7, Math.min(11, rw/9));
-      if (rw > 38 && rh > 24) {
-        h += `<text x="${cx}" y="${cy-5}" text-anchor="middle" fill="${LABEL_C}" font-family="PT Serif,serif" font-size="${fs}">${r.name}</text>`;
-        h += `<text x="${cx}" y="${cy+8}" text-anchor="middle" fill="${DIM_C}"   font-family="PT Serif,serif" font-size="${Math.max(6,fs-2)}">${r.width}′×${r.depth}′</text>`;
+      const rw = ps(RW(r)), rd = ps(RD(r));
+      const cx = rx+rw/2, cy = ry+rd/2;
+      const fs = Math.max(6.5, Math.min(11, rw/8));
+      if (rw > 34 && rd > 22) {
+        h += `<text x="${cx}" y="${cy-4}" text-anchor="middle" fill="${LABEL}" font-family="PT Serif,serif" font-size="${fs}">${r.name}</text>`;
+        h += `<text x="${cx}" y="${cy+8}" text-anchor="middle" fill="${DIM}" font-family="PT Serif,serif" font-size="${Math.max(5.5,fs-2)}">${RW(r)}′×${RD(r)}′</text>`;
       }
     });
 
-    // ── 7. Compass + scale bar ────────────────────────────────────────────
-    const SB  = 40 + ps(10);
-    h += `<line x1="40" y1="465" x2="${SB}" y2="465" stroke="${DIM_C}" stroke-width="2"/>`;
-    h += `<line x1="40" y1="460" x2="40"   y2="470" stroke="${DIM_C}" stroke-width="2"/>`;
-    h += `<line x1="${SB}" y1="460" x2="${SB}" y2="470" stroke="${DIM_C}" stroke-width="2"/>`;
-    h += `<text x="${(40+SB)/2}" y="476" text-anchor="middle" fill="${DIM_C}" font-family="PT Serif,serif" font-size="8">10 feet</text>`;
-    h += `<circle cx="700" cy="450" r="15" fill="none" stroke="rgba(100,160,255,0.35)" stroke-width="1"/>`;
-    h += `<polygon points="700,434 697,447 700,444 703,447" fill="rgba(100,160,255,0.6)"/>`;
-    h += `<text x="700" y="459" text-anchor="middle" fill="rgba(100,160,255,0.7)" font-family="PT Serif,serif" font-size="8">S</text>`;
-    h += `<text x="700" y="440" text-anchor="middle" fill="rgba(100,160,255,0.9)" font-family="PT Serif,serif" font-size="9" font-weight="bold">N</text>`;
+    // ── 8. Scale bar + compass ────────────────────────────────────────────
+    const SBlen = ps(10);
+    const SBx = 44, SBy = SVG_H-22;
+    h += `<line x1="${SBx}" y1="${SBy}" x2="${SBx+SBlen}" y2="${SBy}" stroke="${DIM}" stroke-width="2"/>`;
+    h += `<line x1="${SBx}" y1="${SBy-4}" x2="${SBx}" y2="${SBy+4}" stroke="${DIM}" stroke-width="2"/>`;
+    h += `<line x1="${SBx+SBlen}" y1="${SBy-4}" x2="${SBx+SBlen}" y2="${SBy+4}" stroke="${DIM}" stroke-width="2"/>`;
+    h += `<text x="${SBx+SBlen/2}" y="${SBy+12}" text-anchor="middle" fill="${DIM}" font-family="PT Serif,serif" font-size="8">10 ft</text>`;
 
-    // ── Legend ────────────────────────────────────────────────────────────
-    const lx = 42, ly = 438;
-    h += `<line x1="${lx}" y1="${ly}" x2="${lx+12}" y2="${ly}" stroke="${WIN_C}" stroke-width="2"/> <text x="${lx+15}" y="${ly+3}" fill="${DIM_C}" font-family="PT Serif,serif" font-size="7">Window</text>`;
-    h += `<line x1="${lx+55}" y1="${ly}" x2="${lx+67}" y2="${ly}" stroke="${DOOR_C}" stroke-width="1.5"/> <text x="${lx+70}" y="${ly+3}" fill="${DIM_C}" font-family="PT Serif,serif" font-size="7">Door swing</text>`;
-    h += `<circle cx="${lx+135}" cy="${ly}" r="4" fill="none" stroke="${LIGHT_C}" stroke-width="1.5"/> <text x="${lx+142}" y="${ly+3}" fill="${DIM_C}" font-family="PT Serif,serif" font-size="7">Light fixture</text>`;
+    const Ncx=SVG_W-42, Ncy=SVG_H-28;
+    h += `<circle cx="${Ncx}" cy="${Ncy}" r="14" fill="none" stroke="rgba(100,160,255,0.3)" stroke-width="1"/>`;
+    h += `<polygon points="${Ncx},${Ncy-13} ${Ncx-3},${Ncy-3} ${Ncx},${Ncy-7} ${Ncx+3},${Ncy-3}" fill="rgba(100,160,255,0.75)"/>`;
+    h += `<text x="${Ncx}" y="${Ncy-16}" text-anchor="middle" fill="rgba(100,160,255,0.9)" font-family="PT Serif,serif" font-size="9" font-weight="bold">N</text>`;
+    h += `<text x="${Ncx}" y="${Ncy+10}" text-anchor="middle" fill="rgba(100,160,255,0.55)" font-family="PT Serif,serif" font-size="7">S</text>`;
+
+    // ── 9. Legend ─────────────────────────────────────────────────────────
+    const Lx=SBx, Ly=SVG_H-38;
+    h += `<line x1="${Lx}" y1="${Ly}" x2="${Lx+14}" y2="${Ly}" stroke="${WIN_C}" stroke-width="2.5"/> <text x="${Lx+17}" y="${Ly+3}" fill="${DIM}" font-family="PT Serif,serif" font-size="7">Window</text>`;
+    h += `<line x1="${Lx+62}" y1="${Ly}" x2="${Lx+76}" y2="${Ly}" stroke="${DOOR_C}" stroke-width="1.8"/> <text x="${Lx+79}" y="${Ly+3}" fill="${DIM}" font-family="PT Serif,serif" font-size="7">Door</text>`;
+    h += `<rect x="${Lx+115}" y="${Ly-4}" width="9" height="7" fill="${CLO_C}" stroke="${CLO_S}" stroke-width="1"/> <text x="${Lx+127}" y="${Ly+3}" fill="${DIM}" font-family="PT Serif,serif" font-size="7">Closet</text>`;
+    h += `<rect x="${Lx+168}" y="${Ly-4}" width="9" height="7" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1"/> <text x="${Lx+180}" y="${Ly+3}" fill="${DIM}" font-family="PT Serif,serif" font-size="7">Fixture</text>`;
 
     svg.innerHTML = h;
   }
@@ -1777,7 +2173,7 @@ STRICT RULES:
     const half    = Math.ceil(rooms.length / 2);
     const rowGap  = 8 * SCALE;
     rooms.forEach((room, i) => {
-      const w = room.width * SCALE, h = room.depth * SCALE;
+      const w = (room.w || room.width || 10) * SCALE, h = (room.d || room.depth || 10) * SCALE;
       if (i === half) { cx = 0; cy -= (rowMax + rowGap); rowMax = 0; }
       positions.push({ x: cx, y: cy, w, h, room });
       cx += w + wallT * 2;
@@ -1803,7 +2199,7 @@ STRICT RULES:
       dxf += lwpoly([[ix,iy],[ix+iw,iy],[ix+iw,iy-ih],[ix,iy-ih]], 'WALLS-INNER');
       const mx=x+w/2, my=y-h/2;
       dxf += mtext(mx, my+SCALE*0.7, room.name.toUpperCase(), 'TEXT', SCALE*0.55);
-      dxf += mtext(mx, my, `${room.width}' x ${room.depth}'`, 'DIMENSIONS', SCALE*0.42);
+      dxf += mtext(mx, my, `${room.w||room.width||'?'}' x ${room.d||room.depth||'?'}'`, 'DIMENSIONS', SCALE*0.42);
       dxf += mtext(mx, my-SCALE*0.7, `${room.sqft} SF`, 'DIMENSIONS', SCALE*0.38);
       const doorW = 3 * SCALE;
       dxf += ln(ix, iy-ih, ix+doorW, iy-ih, 'DOORS');
