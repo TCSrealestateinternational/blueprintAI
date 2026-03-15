@@ -1,0 +1,1134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BlueprintAI — AI Floor Plan Generator</title>
+
+<!-- Firebase CDN -->
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+    from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+  import { getFirestore, collection, addDoc, query, orderBy, getDocs, serverTimestamp }
+    from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDvjDAXxPO3s0Fwe1Al3fH1aA6h4jR56SQ",
+    authDomain: "blueprint-ai-a1e75.firebaseapp.com",
+    projectId: "blueprint-ai-a1e75",
+    storageBucket: "blueprint-ai-a1e75.firebasestorage.app",
+    messagingSenderId: "697082782937",
+    appId: "1:697082782937:web:384c31d6f94e2a4eb1cac8"
+  };
+
+  const app  = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db   = getFirestore(app);
+  const provider = new GoogleAuthProvider();
+
+  // Expose to global scope for inline handlers
+  window._fb = { auth, db, provider, GoogleAuthProvider,
+    signInWithPopup, signOut, onAuthStateChanged,
+    collection, addDoc, query, orderBy, getDocs, serverTimestamp };
+
+  onAuthStateChanged(auth, user => {
+    window._currentUser = user || null;
+    updateAuthUI(user);
+  });
+</script>
+
+<style>
+  /* ── Reset & Base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:        #0f1117;
+    --surface:   #1a1d27;
+    --surface2:  #22263a;
+    --border:    #2e3348;
+    --accent:    #4f8ef7;
+    --accent2:   #7c3aed;
+    --success:   #22c55e;
+    --warning:   #f59e0b;
+    --danger:    #ef4444;
+    --text:      #e8eaf0;
+    --text-muted:#8892a4;
+    --radius:    10px;
+    --shadow:    0 4px 24px rgba(0,0,0,.45);
+  }
+  html { font-size: 16px; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif;
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+
+  /* ── Typography ── */
+  h1,h2,h3 { font-weight: 700; line-height: 1.2; }
+  a { color: var(--accent); text-decoration: none; }
+
+  /* ── Nav ── */
+  nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: .85rem 2rem;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .nav-brand { display: flex; align-items: center; gap: .6rem; font-weight: 700; font-size: 1.15rem; }
+  .nav-brand svg { width: 28px; height: 28px; }
+  .nav-actions { display: flex; align-items: center; gap: 1rem; }
+  .btn-nav {
+    background: var(--accent); color: #fff; border: none; border-radius: 6px;
+    padding: .45rem 1rem; font-size: .875rem; font-weight: 600; cursor: pointer;
+    transition: opacity .15s;
+  }
+  .btn-nav:hover { opacity: .85; }
+  .btn-nav.secondary { background: var(--surface2); border: 1px solid var(--border); color: var(--text); }
+  .user-chip {
+    display: flex; align-items: center; gap: .5rem;
+    font-size: .875rem; cursor: default;
+  }
+  .avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: .8rem; color: #fff;
+  }
+  #auth-signed-out { display: flex; gap: .5rem; }
+  #auth-signed-in  { display: none; align-items: center; gap: .75rem; }
+
+  /* ── Hero ── */
+  .hero {
+    text-align: center;
+    padding: 5rem 1rem 3rem;
+    background: radial-gradient(ellipse at 50% 0%, rgba(79,142,247,.15) 0%, transparent 70%);
+  }
+  .hero h1 { font-size: clamp(2rem, 5vw, 3.2rem); margin-bottom: .75rem; }
+  .hero h1 span { background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .hero p { color: var(--text-muted); max-width: 540px; margin: 0 auto 2rem; font-size: 1.05rem; }
+  .badge-row { display: flex; gap: .6rem; justify-content: center; flex-wrap: wrap; margin-bottom: 2.5rem; }
+  .badge {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 999px; padding: .3rem .85rem;
+    font-size: .78rem; color: var(--text-muted);
+  }
+
+  /* ── Wizard Card ── */
+  .wizard-wrap { max-width: 720px; margin: 0 auto 4rem; padding: 0 1rem; }
+
+  /* Progress Bar */
+  .progress-bar {
+    display: flex; gap: 0; margin-bottom: 2rem;
+    border-radius: var(--radius); overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .progress-step {
+    flex: 1; padding: .55rem .4rem; text-align: center;
+    font-size: .73rem; font-weight: 600; color: var(--text-muted);
+    background: var(--surface); transition: background .2s, color .2s;
+    border-right: 1px solid var(--border);
+  }
+  .progress-step:last-child { border-right: none; }
+  .progress-step.active   { background: var(--accent); color: #fff; }
+  .progress-step.complete { background: var(--surface2); color: var(--success); }
+
+  /* Step Card */
+  .step-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 2rem;
+    display: none;
+  }
+  .step-card.active { display: block; }
+  .step-card h2 { font-size: 1.25rem; margin-bottom: .35rem; }
+  .step-card p.sub { color: var(--text-muted); font-size: .9rem; margin-bottom: 1.5rem; }
+
+  /* Form Controls */
+  .option-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: .75rem; margin-bottom: 1.5rem; }
+  .option-btn {
+    background: var(--surface2); border: 2px solid var(--border);
+    border-radius: var(--radius); padding: .9rem .5rem;
+    text-align: center; cursor: pointer; transition: border-color .15s, background .15s;
+    font-size: .85rem; font-weight: 600; color: var(--text);
+  }
+  .option-btn:hover   { border-color: var(--accent); background: rgba(79,142,247,.08); }
+  .option-btn.selected { border-color: var(--accent); background: rgba(79,142,247,.15); color: var(--accent); }
+  .option-btn .icon { font-size: 1.6rem; display: block; margin-bottom: .4rem; }
+
+  label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: .4rem; color: var(--text-muted); }
+  input[type="text"], input[type="number"], select, textarea {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 7px; padding: .65rem .85rem; color: var(--text);
+    font-size: .95rem; font-family: inherit; outline: none;
+    transition: border-color .15s;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 110px; }
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+  .field { margin-bottom: 1rem; }
+
+  /* Photo Upload */
+  .photo-drop {
+    border: 2px dashed var(--border); border-radius: var(--radius);
+    padding: 2.5rem 1rem; text-align: center; cursor: pointer;
+    transition: border-color .2s, background .2s; margin-bottom: 1rem;
+  }
+  .photo-drop:hover, .photo-drop.dragover { border-color: var(--accent); background: rgba(79,142,247,.06); }
+  .photo-drop .drop-icon { font-size: 2.5rem; margin-bottom: .5rem; display: block; }
+  .photo-drop p { color: var(--text-muted); font-size: .9rem; }
+  .photo-preview { position: relative; display: none; margin-bottom: 1rem; }
+  .photo-preview img { width: 100%; max-height: 220px; object-fit: cover; border-radius: var(--radius); }
+  .photo-preview .remove-photo {
+    position: absolute; top: .4rem; right: .4rem;
+    background: rgba(0,0,0,.7); border: none; color: #fff;
+    border-radius: 50%; width: 26px; height: 26px; cursor: pointer; font-size: 1rem;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ai-badge {
+    display: none; background: rgba(79,142,247,.12); border: 1px solid rgba(79,142,247,.3);
+    border-radius: 6px; padding: .5rem .85rem; font-size: .82rem; color: var(--accent);
+    margin-bottom: 1rem;
+  }
+
+  /* Nav Buttons */
+  .step-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 1.75rem; gap: 1rem; }
+  .btn {
+    display: inline-flex; align-items: center; gap: .45rem;
+    border: none; border-radius: 8px; padding: .7rem 1.4rem;
+    font-size: .9rem; font-weight: 600; cursor: pointer; transition: opacity .15s;
+  }
+  .btn:hover { opacity: .85; }
+  .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; }
+  .btn-ghost   { background: var(--surface2); border: 1px solid var(--border); color: var(--text); }
+  .btn-danger  { background: var(--danger); color: #fff; }
+  .btn-success { background: var(--success); color: #fff; }
+  .btn-warn    { background: var(--warning); color: #000; }
+
+  /* Spinner */
+  .spinner {
+    width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.3);
+    border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite;
+    display: inline-block;
+  }
+  .spinner.dark { border-color: rgba(0,0,0,.2); border-top-color: #333; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Result Section ── */
+  #result-section { display: none; max-width: 980px; margin: 0 auto 4rem; padding: 0 1rem; }
+  .result-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; }
+  .result-header h2 { font-size: 1.4rem; }
+
+  .export-bar {
+    display: flex; gap: .6rem; flex-wrap: wrap; align-items: center;
+  }
+  .btn-export {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 7px; padding: .5rem 1rem; font-size: .82rem; font-weight: 600;
+    cursor: pointer; display: flex; align-items: center; gap: .4rem; transition: background .15s;
+  }
+  .btn-export:hover { background: var(--border); }
+  .btn-export.save { border-color: var(--accent); color: var(--accent); display: none; }
+  #auth-save-btn.visible { display: flex; }
+
+  .result-grid { display: grid; grid-template-columns: 1fr 340px; gap: 1.5rem; }
+  @media (max-width: 720px) { .result-grid { grid-template-columns: 1fr; } }
+
+  /* SVG Canvas */
+  .svg-wrap {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 1.5rem; overflow: auto; min-height: 420px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #floor-plan-svg { width: 100%; height: auto; max-width: 560px; }
+
+  /* Details Panel */
+  .details-panel { display: flex; flex-direction: column; gap: 1rem; }
+  .panel-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1.25rem;
+  }
+  .panel-card h3 { font-size: .9rem; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin-bottom: .85rem; }
+  .room-list { list-style: none; display: flex; flex-direction: column; gap: .5rem; }
+  .room-list li {
+    display: flex; justify-content: space-between;
+    font-size: .875rem; padding-bottom: .4rem; border-bottom: 1px solid var(--border);
+  }
+  .room-list li:last-child { border-bottom: none; padding-bottom: 0; }
+  .room-name { font-weight: 600; }
+  .room-sqft { color: var(--text-muted); }
+
+  .compliance-list { list-style: none; display: flex; flex-direction: column; gap: .4rem; }
+  .compliance-item { display: flex; align-items: flex-start; gap: .5rem; font-size: .85rem; }
+  .compliance-item .dot { margin-top: .3rem; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot.pass { background: var(--success); }
+  .dot.warn { background: var(--warning); }
+  .dot.fail { background: var(--danger); }
+
+  .summary-text { font-size: .875rem; color: var(--text-muted); line-height: 1.65; }
+
+  /* ── My Plans Drawer ── */
+  .drawer-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 200;
+    display: none; opacity: 0; transition: opacity .2s;
+  }
+  .drawer-overlay.open { display: block; opacity: 1; }
+  .drawer {
+    position: fixed; top: 0; right: 0; height: 100vh; width: 360px; max-width: 92vw;
+    background: var(--surface); border-left: 1px solid var(--border);
+    z-index: 201; transform: translateX(100%); transition: transform .25s ease;
+    display: flex; flex-direction: column;
+  }
+  .drawer.open { transform: translateX(0); }
+  .drawer-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border);
+  }
+  .drawer-header h2 { font-size: 1.1rem; }
+  .drawer-close { background: none; border: none; color: var(--text-muted); font-size: 1.4rem; cursor: pointer; line-height: 1; }
+  .drawer-body { flex: 1; overflow-y: auto; padding: 1rem 1.5rem; }
+  .plan-card {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 1rem; margin-bottom: .75rem; cursor: pointer; transition: border-color .15s;
+  }
+  .plan-card:hover { border-color: var(--accent); }
+  .plan-card h4 { font-size: .95rem; margin-bottom: .25rem; }
+  .plan-card .meta { font-size: .78rem; color: var(--text-muted); }
+  .drawer-empty { color: var(--text-muted); font-size: .9rem; text-align: center; padding: 2rem 0; }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 500;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: .75rem 1.25rem; font-size: .875rem;
+    box-shadow: var(--shadow); display: none; align-items: center; gap: .5rem;
+  }
+  .toast.show { display: flex; }
+  .toast.success { border-color: var(--success); color: var(--success); }
+  .toast.error   { border-color: var(--danger);  color: var(--danger); }
+
+  /* ── Generate Loading ── */
+  #generate-loading {
+    display: none; text-align: center; padding: 3rem 1rem;
+  }
+  .generate-spinner {
+    width: 54px; height: 54px; border: 4px solid rgba(79,142,247,.2);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 1s linear infinite; margin: 0 auto 1rem;
+  }
+  #generate-loading p { color: var(--text-muted); margin-bottom: .3rem; }
+  #generate-loading small { color: var(--text-muted); font-size: .8rem; }
+</style>
+</head>
+
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-brand">
+    <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="28" height="28" rx="6" fill="url(#g)"/>
+      <rect x="5" y="5" width="8" height="8" rx="1" fill="rgba(255,255,255,.85)"/>
+      <rect x="15" y="5" width="8" height="8" rx="1" fill="rgba(255,255,255,.5)"/>
+      <rect x="5" y="15" width="18" height="8" rx="1" fill="rgba(255,255,255,.65)"/>
+      <defs><linearGradient id="g" x1="0" y1="0" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#4f8ef7"/><stop offset="1" stop-color="#7c3aed"/>
+      </linearGradient></defs>
+    </svg>
+    BlueprintAI
+  </div>
+  <div class="nav-actions">
+    <div id="auth-signed-out">
+      <button class="btn-nav" onclick="signIn()">Sign In with Google</button>
+    </div>
+    <div id="auth-signed-in">
+      <button class="btn-nav secondary" onclick="openPlansDrawer()">My Plans</button>
+      <div class="user-chip">
+        <div class="avatar" id="user-avatar">?</div>
+        <span id="user-name"></span>
+      </div>
+      <button class="btn-nav secondary" onclick="doSignOut()">Sign Out</button>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <h1>Generate a <span>Code-Compliant</span><br>Floor Plan in Seconds</h1>
+  <p>Describe your space, optionally upload a photo, and get a 2D SVG floor plan you can export to PDF, DXF, or Archsynth.</p>
+  <div class="badge-row">
+    <span class="badge">⚡ AI-Powered</span>
+    <span class="badge">📐 SVG Output</span>
+    <span class="badge">📄 PDF Export</span>
+    <span class="badge">🔧 DXF Export</span>
+    <span class="badge">✅ Code-Compliant</span>
+  </div>
+</section>
+
+<!-- WIZARD -->
+<div class="wizard-wrap">
+
+  <!-- Progress -->
+  <div class="progress-bar" id="progress-bar">
+    <div class="progress-step active" data-step="0">Photo</div>
+    <div class="progress-step"        data-step="1">Location</div>
+    <div class="progress-step"        data-step="2">Type</div>
+    <div class="progress-step"        data-step="3">Describe</div>
+    <div class="progress-step"        data-step="4">Generate</div>
+  </div>
+
+  <!-- Step 0: Photo Upload -->
+  <div class="step-card active" id="step-0">
+    <h2>Have a photo of your space?</h2>
+    <p class="sub">Optional — upload a photo and AI will pre-fill your description for you.</p>
+
+    <div class="photo-drop" id="photo-drop" onclick="document.getElementById('photo-input').click()"
+         ondragover="event.preventDefault(); this.classList.add('dragover')"
+         ondragleave="this.classList.remove('dragover')"
+         ondrop="handlePhotoDrop(event)">
+      <span class="drop-icon">📷</span>
+      <p>Drag &amp; drop a photo here, or <strong>click to browse</strong></p>
+      <p style="margin-top:.3rem;font-size:.78rem;">JPEG, PNG, WEBP — max 10 MB</p>
+    </div>
+    <input type="file" id="photo-input" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="handlePhotoSelect(event)" />
+
+    <div class="photo-preview" id="photo-preview">
+      <img id="photo-thumb" src="" alt="Selected photo" />
+      <button class="remove-photo" onclick="clearPhoto()" title="Remove">✕</button>
+    </div>
+
+    <div class="ai-badge" id="ai-badge"></div>
+
+    <div class="step-nav">
+      <div></div>
+      <div style="display:flex;gap:.6rem;">
+        <button class="btn btn-ghost" id="analyze-btn" onclick="analyzePhoto()" style="display:none">
+          <span class="spinner" id="analyze-spinner" style="display:none"></span>
+          Analyze Photo
+        </button>
+        <button class="btn btn-ghost" onclick="goToStep(1)">Skip →</button>
+        <button class="btn btn-primary" id="photo-next-btn" onclick="goToStep(1)" style="display:none">Next →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 1: Location -->
+  <div class="step-card" id="step-1">
+    <h2>Where is this project?</h2>
+    <p class="sub">Location helps ensure local building code compliance.</p>
+    <div class="row-2">
+      <div class="field">
+        <label>City</label>
+        <input type="text" id="city" placeholder="e.g. Lexington" />
+      </div>
+      <div class="field">
+        <label>State / Province</label>
+        <input type="text" id="state" placeholder="e.g. Kentucky" />
+      </div>
+    </div>
+    <div class="field">
+      <label>Country</label>
+      <select id="country">
+        <option>United States</option>
+        <option>Canada</option>
+        <option>United Kingdom</option>
+        <option>Australia</option>
+        <option>Other</option>
+      </select>
+    </div>
+    <div class="step-nav">
+      <button class="btn btn-ghost" onclick="goToStep(0)">← Back</button>
+      <button class="btn btn-primary" onclick="goToStep(2)">Next →</button>
+    </div>
+  </div>
+
+  <!-- Step 2: Space Type -->
+  <div class="step-card" id="step-2">
+    <h2>What type of space?</h2>
+    <p class="sub">Select the primary use of the floor plan.</p>
+    <div class="option-grid" id="type-grid">
+      <div class="option-btn" onclick="selectType(this,'Single-Family Home')"><span class="icon">🏠</span>Single Family</div>
+      <div class="option-btn" onclick="selectType(this,'Apartment / Condo')"><span class="icon">🏢</span>Apartment</div>
+      <div class="option-btn" onclick="selectType(this,'Office')"><span class="icon">💼</span>Office</div>
+      <div class="option-btn" onclick="selectType(this,'Retail')"><span class="icon">🛍️</span>Retail</div>
+      <div class="option-btn" onclick="selectType(this,'Restaurant / Cafe')"><span class="icon">☕</span>Restaurant</div>
+      <div class="option-btn" onclick="selectType(this,'Garage / Workshop')"><span class="icon">🔧</span>Garage</div>
+      <div class="option-btn" onclick="selectType(this,'Studio / ADU')"><span class="icon">🏡</span>Studio / ADU</div>
+      <div class="option-btn" onclick="selectType(this,'Tiny Home')"><span class="icon">🌿</span>Tiny Home</div>
+    </div>
+    <div class="step-nav">
+      <button class="btn btn-ghost" onclick="goToStep(1)">← Back</button>
+      <button class="btn btn-primary" onclick="goToStep(3)">Next →</button>
+    </div>
+  </div>
+
+  <!-- Step 3: Description -->
+  <div class="step-card" id="step-3">
+    <h2>Describe your space</h2>
+    <p class="sub">Include rooms, sizes, features, style preferences, and any special requirements.</p>
+    <div class="row-2">
+      <div class="field">
+        <label>Total Square Footage (approx.)</label>
+        <input type="number" id="sqft" placeholder="e.g. 1200" min="100" max="20000" />
+      </div>
+      <div class="field">
+        <label>Number of Stories</label>
+        <select id="stories">
+          <option value="1">1 Story</option>
+          <option value="2">2 Stories</option>
+          <option value="3">3 Stories</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label>Style Preference</label>
+      <select id="style">
+        <option>Open Concept</option>
+        <option>Traditional / Defined Rooms</option>
+        <option>Modern Minimalist</option>
+        <option>Farmhouse</option>
+        <option>Contemporary</option>
+        <option>Industrial</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Space Description <span style="font-weight:400;color:var(--text-muted)">(the more detail, the better)</span></label>
+      <textarea id="description" placeholder="e.g. I need a 3-bedroom, 2-bath home with an open kitchen/living area, a dedicated home office, a mudroom off the garage entrance, and a covered back porch…"></textarea>
+    </div>
+    <div class="field">
+      <label>Special Requirements (accessibility, code notes, etc.)</label>
+      <input type="text" id="special" placeholder="e.g. ADA accessible, wide doorways, no-step entry" />
+    </div>
+    <div class="step-nav">
+      <button class="btn btn-ghost" onclick="goToStep(2)">← Back</button>
+      <button class="btn btn-primary" onclick="goToStep(4)">Next →</button>
+    </div>
+  </div>
+
+  <!-- Step 4: Generate -->
+  <div class="step-card" id="step-4">
+    <h2>Ready to generate</h2>
+    <p class="sub">Review your inputs and click Generate to create your AI floor plan.</p>
+    <div id="summary-preview" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.25rem;font-size:.875rem;line-height:1.7;color:var(--text-muted);margin-bottom:1.5rem;"></div>
+    <div class="step-nav">
+      <button class="btn btn-ghost" onclick="goToStep(3)">← Back</button>
+      <button class="btn btn-primary" id="generate-btn" onclick="generatePlan()">
+        <span class="spinner" id="gen-spinner" style="display:none"></span>
+        ✨ Generate Floor Plan
+      </button>
+    </div>
+  </div>
+
+</div><!-- /wizard-wrap -->
+
+<!-- GENERATE LOADING OVERLAY (shown in result area while waiting) -->
+<div id="generate-loading">
+  <div class="generate-spinner"></div>
+  <p>Generating your floor plan…</p>
+  <small>This usually takes 10–20 seconds. Hang tight!</small>
+</div>
+
+<!-- RESULT SECTION -->
+<div id="result-section">
+  <div class="result-header">
+    <h2 id="result-title">Your Floor Plan</h2>
+    <div class="export-bar">
+      <button class="btn-export save" id="auth-save-btn" onclick="savePlan()">💾 Save Plan</button>
+      <button class="btn-export" onclick="exportPDF()">📄 Export PDF</button>
+      <button class="btn-export" onclick="exportDXF()">🔧 Export DXF</button>
+      <button class="btn-export" onclick="exportArchsynth()">🏗 Archsynth</button>
+      <button class="btn-export" onclick="startOver()">🔄 New Plan</button>
+    </div>
+  </div>
+
+  <div class="result-grid">
+    <div class="svg-wrap">
+      <svg id="floor-plan-svg" viewBox="0 0 600 500" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+    <div class="details-panel">
+      <div class="panel-card">
+        <h3>Rooms &amp; Areas</h3>
+        <ul class="room-list" id="room-list"></ul>
+      </div>
+      <div class="panel-card">
+        <h3>Code Compliance</h3>
+        <ul class="compliance-list" id="compliance-list"></ul>
+      </div>
+      <div class="panel-card">
+        <h3>Design Notes</h3>
+        <p class="summary-text" id="summary-text"></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MY PLANS DRAWER -->
+<div class="drawer-overlay" id="drawer-overlay" onclick="closePlansDrawer()"></div>
+<aside class="drawer" id="plans-drawer">
+  <div class="drawer-header">
+    <h2>My Plans</h2>
+    <button class="drawer-close" onclick="closePlansDrawer()">✕</button>
+  </div>
+  <div class="drawer-body" id="drawer-body">
+    <p class="drawer-empty">Sign in to save and view your plans.</p>
+  </div>
+</aside>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+const state = {
+  step: 0,
+  location: { city: '', state: '', country: 'United States' },
+  spaceType: '',
+  sqft: '',
+  stories: '1',
+  style: 'Open Concept',
+  description: '',
+  special: '',
+  photo: null,          // { base64, mediaType, file }
+  aiPhotoData: null,    // { roomType, estimatedDimensions, features, description }
+  generatedPlan: null,  // raw plan object from Claude
+};
+
+// ── Auth ───────────────────────────────────────────────────────────────────
+function updateAuthUI(user) {
+  const out = document.getElementById('auth-signed-out');
+  const inn = document.getElementById('auth-signed-in');
+  const saveBtn = document.getElementById('auth-save-btn');
+  if (user) {
+    out.style.display = 'none';
+    inn.style.display = 'flex';
+    document.getElementById('user-avatar').textContent = (user.displayName || user.email || '?')[0].toUpperCase();
+    document.getElementById('user-name').textContent = user.displayName || user.email;
+    if (saveBtn && state.generatedPlan) saveBtn.classList.add('visible');
+  } else {
+    out.style.display = 'flex';
+    inn.style.display = 'none';
+    if (saveBtn) saveBtn.classList.remove('visible');
+  }
+}
+
+async function signIn() {
+  if (!window._fb) return showToast('Firebase not configured yet.', 'error');
+  try {
+    await window._fb.signInWithPopup(window._fb.auth, window._fb.provider);
+  } catch (e) {
+    showToast('Sign-in failed: ' + e.message, 'error');
+  }
+}
+
+async function doSignOut() {
+  if (!window._fb) return;
+  await window._fb.signOut(window._fb.auth);
+  showToast('Signed out.');
+}
+
+// ── Progress ───────────────────────────────────────────────────────────────
+function goToStep(n) {
+  // Update state from current inputs before leaving
+  collectCurrentStep(state.step);
+  state.step = n;
+  renderProgress(n);
+  document.querySelectorAll('.step-card').forEach(c => c.classList.remove('active'));
+  document.getElementById('step-' + n).classList.add('active');
+  if (n === 4) buildSummaryPreview();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function renderProgress(active) {
+  document.querySelectorAll('.progress-step').forEach(el => {
+    const s = parseInt(el.dataset.step);
+    el.classList.remove('active', 'complete');
+    if (s === active)  el.classList.add('active');
+    if (s < active)    el.classList.add('complete');
+  });
+}
+
+function collectCurrentStep(n) {
+  if (n === 1) {
+    state.location.city    = document.getElementById('city').value.trim();
+    state.location.state   = document.getElementById('state').value.trim();
+    state.location.country = document.getElementById('country').value;
+  }
+  if (n === 3) {
+    state.sqft        = document.getElementById('sqft').value;
+    state.stories     = document.getElementById('stories').value;
+    state.style       = document.getElementById('style').value;
+    state.description = document.getElementById('description').value.trim();
+    state.special     = document.getElementById('special').value.trim();
+  }
+}
+
+// ── Photo ──────────────────────────────────────────────────────────────────
+function handlePhotoSelect(evt) {
+  const file = evt.target.files[0];
+  if (file) loadPhotoFile(file);
+}
+
+function handlePhotoDrop(evt) {
+  evt.preventDefault();
+  document.getElementById('photo-drop').classList.remove('dragover');
+  const file = evt.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) loadPhotoFile(file);
+}
+
+function loadPhotoFile(file) {
+  if (file.size > 10 * 1024 * 1024) { showToast('File too large (max 10 MB)', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const dataUrl = e.target.result;
+    const base64  = dataUrl.split(',')[1];
+    state.photo   = { base64, mediaType: file.type, file, dataUrl };
+    document.getElementById('photo-thumb').src = dataUrl;
+    document.getElementById('photo-preview').style.display = 'block';
+    document.getElementById('photo-drop').style.display    = 'none';
+    document.getElementById('analyze-btn').style.display   = 'inline-flex';
+    document.getElementById('photo-next-btn').style.display = 'inline-flex';
+    document.getElementById('ai-badge').style.display = 'none';
+    state.aiPhotoData = null;
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearPhoto() {
+  state.photo = null;
+  state.aiPhotoData = null;
+  document.getElementById('photo-thumb').src = '';
+  document.getElementById('photo-preview').style.display   = 'none';
+  document.getElementById('photo-drop').style.display      = '';
+  document.getElementById('analyze-btn').style.display     = 'none';
+  document.getElementById('photo-next-btn').style.display  = 'none';
+  document.getElementById('ai-badge').style.display        = 'none';
+  document.getElementById('photo-input').value             = '';
+}
+
+async function analyzePhoto() {
+  if (!state.photo) return;
+  const btn     = document.getElementById('analyze-btn');
+  const spinner = document.getElementById('analyze-spinner');
+  btn.disabled  = true;
+  spinner.style.display = 'inline-block';
+  try {
+    const res  = await fetch('/api/analyze-photo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageBase64: state.photo.base64, mediaType: state.photo.mediaType }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    state.aiPhotoData = data;
+    const badge = document.getElementById('ai-badge');
+    badge.style.display = 'block';
+    badge.innerHTML = `🤖 AI detected: <strong>${data.roomType || 'Room'}</strong> · ${data.estimatedDimensions || 'size estimated'} · ${(data.features || []).slice(0,3).join(', ')}`;
+    if (data.description) {
+      document.getElementById('description').value = data.description;
+    }
+    showToast('Photo analyzed! Description pre-filled.', 'success');
+    document.getElementById('photo-next-btn').style.display = 'inline-flex';
+  } catch (e) {
+    showToast('Photo analysis failed: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    spinner.style.display = 'none';
+  }
+}
+
+// ── Space Type ─────────────────────────────────────────────────────────────
+function selectType(el, type) {
+  document.querySelectorAll('#type-grid .option-btn').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+  state.spaceType = type;
+}
+
+// ── Summary Preview ────────────────────────────────────────────────────────
+function buildSummaryPreview() {
+  collectCurrentStep(3);
+  const loc = [state.location.city, state.location.state, state.location.country].filter(Boolean).join(', ') || 'Not specified';
+  const lines = [
+    `<strong>Location:</strong> ${loc}`,
+    `<strong>Type:</strong> ${state.spaceType || 'Not selected'}`,
+    `<strong>Size:</strong> ${state.sqft ? state.sqft + ' sq ft' : 'Not specified'} · ${state.stories} stor${state.stories === '1' ? 'y' : 'ies'}`,
+    `<strong>Style:</strong> ${state.style}`,
+    `<strong>Description:</strong> ${state.description || '(none)'}`,
+    state.special ? `<strong>Special Req:</strong> ${state.special}` : null,
+    state.aiPhotoData ? `<strong>AI Photo:</strong> ${state.aiPhotoData.roomType} · ${state.aiPhotoData.estimatedDimensions}` : null,
+  ].filter(Boolean);
+  document.getElementById('summary-preview').innerHTML = lines.join('<br>');
+}
+
+// ── Generate ───────────────────────────────────────────────────────────────
+async function generatePlan() {
+  collectCurrentStep(3);
+  const btn     = document.getElementById('generate-btn');
+  const spinner = document.getElementById('gen-spinner');
+  btn.disabled  = true;
+  spinner.style.display = 'inline-block';
+
+  // Hide wizard, show loading
+  document.querySelector('.wizard-wrap').style.display    = 'none';
+  document.getElementById('generate-loading').style.display = 'block';
+  document.getElementById('result-section').style.display   = 'none';
+
+  const loc = [state.location.city, state.location.state, state.location.country].filter(Boolean).join(', ') || 'Not specified';
+
+  const prompt = `You are an expert architectural designer specializing in residential and commercial floor plans. Generate a complete, code-compliant 2D floor plan based on these specifications:
+
+LOCATION: ${loc}
+SPACE TYPE: ${state.spaceType || 'Residential'}
+TOTAL SIZE: ${state.sqft || 'Flexible'} sq ft
+STORIES: ${state.stories}
+STYLE: ${state.style}
+DESCRIPTION: ${state.description || 'Standard layout'}
+SPECIAL REQUIREMENTS: ${state.special || 'None'}
+${state.aiPhotoData ? `PHOTO ANALYSIS: Detected ${state.aiPhotoData.roomType} with features: ${(state.aiPhotoData.features||[]).join(', ')}` : ''}
+
+Respond with a JSON object (no markdown, raw JSON only) in exactly this structure:
+{
+  "title": "descriptive plan title",
+  "totalSqft": number,
+  "rooms": [
+    { "name": "Room Name", "width": number_ft, "height": number_ft, "x": number_ft, "y": number_ft, "type": "bedroom|bathroom|kitchen|living|dining|office|garage|utility|hallway|other" }
+  ],
+  "compliance": [
+    { "check": "description of compliance item", "status": "pass|warn|fail" }
+  ],
+  "summary": "3-5 sentence design summary explaining the layout, flow, and key features",
+  "scale": "1:X"
+}
+
+Requirements:
+- Rooms must fit together logically (x,y coordinates are feet from top-left corner, no overlaps)
+- Include appropriate egress, hallways, and circulation space
+- Bathrooms must meet minimum 5x8 ft code requirement
+- Bedrooms must meet minimum 70 sq ft with at least 7 ft in any direction
+- Ensure proper door placement and natural light considerations
+- Include at least 5 compliance checks relevant to the location's building codes
+- Rooms array should include ALL spaces including hallways and closets`;
+
+  try {
+    const res  = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    const text    = data.content?.[0]?.text || '';
+    let planObj;
+    try {
+      planObj = JSON.parse(text);
+    } catch {
+      const match = text.match(/\{[\s\S]*\}/);
+      planObj = match ? JSON.parse(match[0]) : null;
+    }
+    if (!planObj) throw new Error('Could not parse floor plan from AI response.');
+
+    state.generatedPlan = planObj;
+    renderResult(planObj);
+
+    // Show save button if signed in
+    if (window._currentUser) {
+      document.getElementById('auth-save-btn').classList.add('visible');
+    }
+
+  } catch (e) {
+    showToast('Generation failed: ' + e.message, 'error');
+    document.querySelector('.wizard-wrap').style.display = '';
+    document.getElementById('generate-loading').style.display = 'none';
+  } finally {
+    btn.disabled = false;
+    spinner.style.display = 'none';
+  }
+}
+
+// ── Render Result ──────────────────────────────────────────────────────────
+function renderResult(plan) {
+  document.getElementById('generate-loading').style.display = 'none';
+  document.getElementById('result-section').style.display   = 'block';
+  document.getElementById('result-title').textContent = plan.title || 'Your Floor Plan';
+
+  renderSVG(plan.rooms || []);
+  renderRoomList(plan.rooms || []);
+  renderCompliance(plan.compliance || []);
+  document.getElementById('summary-text').textContent = plan.summary || '';
+  window.scrollTo({ top: document.getElementById('result-section').offsetTop - 80, behavior: 'smooth' });
+}
+
+function renderSVG(rooms) {
+  const svg = document.getElementById('floor-plan-svg');
+  svg.innerHTML = '';
+
+  if (!rooms.length) { svg.innerHTML = '<text x="300" y="250" text-anchor="middle" fill="#8892a4">No rooms generated</text>'; return; }
+
+  // Find bounds
+  const maxX = Math.max(...rooms.map(r => r.x + r.width));
+  const maxY = Math.max(...rooms.map(r => r.y + r.height));
+  const pad  = 2; // ft padding
+  const scale = Math.min(560 / (maxX + pad * 2), 460 / (maxY + pad * 2));
+  const offX  = pad * scale;
+  const offY  = pad * scale;
+
+  const colors = {
+    bedroom: '#4f8ef720', bathroom: '#22c55e20', kitchen: '#f59e0b20',
+    living: '#7c3aed20', dining: '#ec489920', office: '#06b6d420',
+    garage: '#71717a20', utility: '#a8a29e20', hallway: '#d4d4d820', other: '#e5e7eb20',
+  };
+  const strokes = {
+    bedroom: '#4f8ef7', bathroom: '#22c55e', kitchen: '#f59e0b',
+    living: '#7c3aed', dining: '#ec4899', office: '#06b6d4',
+    garage: '#71717a', utility: '#a8a29e', hallway: '#d4d4d8', other: '#9ca3af',
+  };
+
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const vW = (maxX + pad * 2) * scale;
+  const vH = (maxY + pad * 2) * scale;
+  svg.setAttribute('viewBox', `0 0 ${vW} ${vH}`);
+
+  rooms.forEach(r => {
+    const px = r.x * scale + offX;
+    const py = r.y * scale + offY;
+    const pw = r.width  * scale;
+    const ph = r.height * scale;
+    const t  = r.type?.toLowerCase() || 'other';
+    const fill   = colors[t]   || colors.other;
+    const stroke = strokes[t]  || strokes.other;
+
+    const rect = document.createElementNS(svgNS, 'rect');
+    rect.setAttribute('x', px); rect.setAttribute('y', py);
+    rect.setAttribute('width', pw); rect.setAttribute('height', ph);
+    rect.setAttribute('fill', fill); rect.setAttribute('stroke', stroke);
+    rect.setAttribute('stroke-width', '1.5');
+    svg.appendChild(rect);
+
+    // Label (only if room is big enough)
+    if (pw > 50 && ph > 30) {
+      const label = document.createElementNS(svgNS, 'text');
+      label.setAttribute('x', px + pw / 2);
+      label.setAttribute('y', py + ph / 2 - 6);
+      label.setAttribute('text-anchor', 'middle');
+      label.setAttribute('dominant-baseline', 'middle');
+      label.setAttribute('fill', stroke);
+      label.setAttribute('font-size', Math.min(11, pw / 8));
+      label.setAttribute('font-weight', '600');
+      label.setAttribute('font-family', 'Inter, system-ui, sans-serif');
+      label.textContent = r.name;
+      svg.appendChild(label);
+
+      const dim = document.createElementNS(svgNS, 'text');
+      dim.setAttribute('x', px + pw / 2);
+      dim.setAttribute('y', py + ph / 2 + 10);
+      dim.setAttribute('text-anchor', 'middle');
+      dim.setAttribute('fill', '#8892a4');
+      dim.setAttribute('font-size', Math.min(9, pw / 10));
+      dim.setAttribute('font-family', 'Inter, system-ui, sans-serif');
+      dim.textContent = `${r.width}′ × ${r.height}′`;
+      svg.appendChild(dim);
+    }
+  });
+
+  // Scale bar
+  const barLen = 10 * scale; // 10 ft
+  const barY   = vH - 18;
+  const barX   = offX;
+  const bar = document.createElementNS(svgNS, 'line');
+  bar.setAttribute('x1', barX); bar.setAttribute('y1', barY);
+  bar.setAttribute('x2', barX + barLen); bar.setAttribute('y2', barY);
+  bar.setAttribute('stroke', '#8892a4'); bar.setAttribute('stroke-width', '2');
+  svg.appendChild(bar);
+  ['0', "10'"].forEach((t, i) => {
+    const tEl = document.createElementNS(svgNS, 'text');
+    tEl.setAttribute('x', barX + i * barLen);
+    tEl.setAttribute('y', barY - 4);
+    tEl.setAttribute('text-anchor', 'middle');
+    tEl.setAttribute('fill', '#8892a4');
+    tEl.setAttribute('font-size', '8');
+    tEl.setAttribute('font-family', 'Inter, system-ui, sans-serif');
+    tEl.textContent = t;
+    svg.appendChild(tEl);
+  });
+}
+
+function renderRoomList(rooms) {
+  const ul = document.getElementById('room-list');
+  ul.innerHTML = '';
+  rooms.filter(r => r.type !== 'hallway').forEach(r => {
+    const sqft = Math.round(r.width * r.height);
+    const li   = document.createElement('li');
+    li.innerHTML = `<span class="room-name">${r.name}</span><span class="room-sqft">${sqft} sq ft</span>`;
+    ul.appendChild(li);
+  });
+}
+
+function renderCompliance(checks) {
+  const ul = document.getElementById('compliance-list');
+  ul.innerHTML = '';
+  checks.forEach(c => {
+    const li  = document.createElement('li');
+    li.className = 'compliance-item';
+    const dot = document.createElement('div');
+    dot.className = 'dot ' + (c.status || 'pass');
+    li.appendChild(dot);
+    const span = document.createElement('span');
+    span.textContent = c.check;
+    li.appendChild(span);
+    ul.appendChild(li);
+  });
+}
+
+// ── Save Plan ──────────────────────────────────────────────────────────────
+async function savePlan() {
+  if (!window._currentUser || !window._fb || !state.generatedPlan) return;
+  try {
+    const { db, collection, addDoc, serverTimestamp } = window._fb;
+    const uid  = window._currentUser.uid;
+    const plan = state.generatedPlan;
+    await addDoc(collection(db, 'plans', uid, 'items'), {
+      title:     plan.title || 'Untitled Plan',
+      sqft:      plan.totalSqft || state.sqft || 0,
+      rooms:     plan.rooms || [],
+      compliance:plan.compliance || [],
+      summary:   plan.summary || '',
+      location:  state.location,
+      spaceType: state.spaceType,
+      createdAt: serverTimestamp(),
+    });
+    showToast('Plan saved to My Plans!', 'success');
+  } catch (e) {
+    showToast('Save failed: ' + e.message, 'error');
+  }
+}
+
+// ── My Plans Drawer ────────────────────────────────────────────────────────
+async function openPlansDrawer() {
+  document.getElementById('drawer-overlay').classList.add('open');
+  document.getElementById('plans-drawer').classList.add('open');
+  if (!window._currentUser || !window._fb) return;
+  const body = document.getElementById('drawer-body');
+  body.innerHTML = '<p class="drawer-empty">Loading…</p>';
+  try {
+    const { db, collection, query, orderBy, getDocs } = window._fb;
+    const uid  = window._currentUser.uid;
+    const q    = query(collection(db, 'plans', uid, 'items'), orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    if (snap.empty) { body.innerHTML = '<p class="drawer-empty">No saved plans yet.</p>'; return; }
+    body.innerHTML = '';
+    snap.forEach(doc => {
+      const d   = doc.data();
+      const card = document.createElement('div');
+      card.className = 'plan-card';
+      const date = d.createdAt?.toDate ? d.createdAt.toDate().toLocaleDateString() : 'Unknown date';
+      card.innerHTML = `<h4>${d.title || 'Untitled'}</h4><p class="meta">${d.sqft || '?'} sq ft · ${date}</p>`;
+      card.onclick   = () => { restorePlan(d); closePlansDrawer(); };
+      body.appendChild(card);
+    });
+  } catch (e) {
+    body.innerHTML = `<p class="drawer-empty">Error loading plans: ${e.message}</p>`;
+  }
+}
+
+function closePlansDrawer() {
+  document.getElementById('drawer-overlay').classList.remove('open');
+  document.getElementById('plans-drawer').classList.remove('open');
+}
+
+function restorePlan(d) {
+  state.generatedPlan = d;
+  document.querySelector('.wizard-wrap').style.display    = 'none';
+  document.getElementById('generate-loading').style.display = 'none';
+  renderResult(d);
+}
+
+// ── Export ─────────────────────────────────────────────────────────────────
+function exportPDF() {
+  const original = document.getElementById('result-section');
+  const printArea = document.createElement('div');
+  printArea.innerHTML = `
+    <h1 style="font-family:system-ui;margin-bottom:1rem;">${state.generatedPlan?.title || 'Floor Plan'}</h1>
+    ${document.querySelector('.svg-wrap').innerHTML}
+    <hr style="margin:1rem 0;">
+    <p style="font-family:system-ui;font-size:.85rem;color:#666">${state.generatedPlan?.summary || ''}</p>
+  `;
+  const win = window.open('', '_blank');
+  win.document.write(`<html><head><title>Floor Plan PDF</title>
+    <style>body{font-family:system-ui;padding:2rem;}svg{max-width:100%;height:auto;}</style>
+  </head><body>${printArea.innerHTML}</body></html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); win.close(); }, 600);
+}
+
+function exportDXF() {
+  const rooms = state.generatedPlan?.rooms || [];
+  if (!rooms.length) { showToast('No plan to export.', 'error'); return; }
+
+  // Build a minimal DXF R12 file
+  let dxf = '0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1009\n0\nENDSEC\n';
+  dxf    += '0\nSECTION\n2\nENTITIES\n';
+
+  const SCALE = 12; // 1 ft = 12 DXF units (inches)
+  rooms.forEach(r => {
+    const x1 = r.x * SCALE, y1 = r.y * SCALE;
+    const x2 = (r.x + r.width) * SCALE, y2 = (r.y + r.height) * SCALE;
+    // Four lines forming a rectangle
+    [[x1,y1,x2,y1],[x2,y1,x2,y2],[x2,y2,x1,y2],[x1,y2,x1,y1]].forEach(([ax,ay,bx,by]) => {
+      dxf += `0\nLINE\n8\n${r.name}\n10\n${ax}\n20\n${ay}\n30\n0\n11\n${bx}\n21\n${by}\n31\n0\n`;
+    });
+    // Text label
+    dxf += `0\nTEXT\n8\n${r.name}\n10\n${(x1+x2)/2}\n20\n${(y1+y2)/2}\n30\n0\n40\n10\n1\n${r.name}\n`;
+  });
+
+  dxf += '0\nENDSEC\n0\nEOF\n';
+  const blob = new Blob([dxf], { type: 'application/dxf' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = (state.generatedPlan?.title || 'floor-plan').replace(/\s+/g, '-').toLowerCase() + '.dxf';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportArchsynth() {
+  const plan = state.generatedPlan;
+  if (!plan) { showToast('No plan to export.', 'error'); return; }
+  const payload = JSON.stringify({ blueprint: plan, generator: 'BlueprintAI', version: '1.0' }, null, 2);
+  const blob    = new Blob([payload], { type: 'application/json' });
+  const url     = URL.createObjectURL(blob);
+  const a       = document.createElement('a');
+  a.href        = url;
+  a.download    = (plan.title || 'floor-plan').replace(/\s+/g, '-').toLowerCase() + '.archsynth.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Archsynth JSON exported.');
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function startOver() {
+  state.generatedPlan = null;
+  state.photo = null;
+  state.aiPhotoData = null;
+  document.querySelector('.wizard-wrap').style.display    = '';
+  document.getElementById('result-section').style.display   = 'none';
+  document.getElementById('generate-loading').style.display = 'none';
+  document.getElementById('auth-save-btn').classList.remove('visible');
+  goToStep(0);
+  clearPhoto();
+}
+
+let toastTimer;
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className   = 'toast show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
+}
+</script>
+</body>
+</html>
