@@ -810,6 +810,51 @@
   </nav>
 </header>
 
+<!-- ── LOGIN SCREEN ─────────────────────────────────────────── -->
+<div id="login-screen" style="
+  position:fixed; inset:0; z-index:300;
+  background:#fefdfe;
+  display:flex; align-items:center; justify-content:center;
+  font-family:'PT Serif',serif;
+">
+  <div style="
+    background:#f7f5f1; border:1px solid #d8d2c8; border-radius:14px;
+    padding:3rem 2.5rem; max-width:440px; width:90%; text-align:center;
+    box-shadow:0 8px 40px rgba(51,90,58,0.12);
+    position:relative; overflow:hidden;
+  ">
+    <!-- Blueprint grid decoration -->
+    <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(51,90,58,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(51,90,58,0.04) 1px,transparent 1px);background-size:32px 32px;pointer-events:none;"></div>
+    <div style="position:relative;z-index:1;">
+      <div style="width:52px;height:52px;background:#335a3a;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.6rem;margin:0 auto 1.25rem;">📐</div>
+      <div style="font-family:'Cormorant',serif;font-size:2rem;font-weight:500;color:#335a3a;margin-bottom:.3rem;">Blueprint<span style="color:#668c66;">AI</span></div>
+      <div style="font-size:.78rem;text-transform:uppercase;letter-spacing:.1em;color:#8faf9a;margin-bottom:2rem;font-family:'PT Serif',serif;">AI-Powered Floor Plans</div>
+      <p style="font-size:.9rem;color:#668c66;line-height:1.75;margin-bottom:2rem;font-style:italic;">
+        Describe your home, your family, your life — and get a real, code-compliant floor plan in minutes.
+      </p>
+      <button onclick="signIn()" style="
+        width:100%; background:#335a3a; color:#fefdfe; border:none; border-radius:7px;
+        padding:.9rem 1.5rem; font-family:'Cormorant',serif; font-size:1.05rem;
+        font-weight:500; letter-spacing:.03em; cursor:pointer;
+        display:flex; align-items:center; justify-content:center; gap:.75rem;
+        transition:background .2s; margin-bottom:.85rem;
+      " onmouseover="this.style.background='#2a4830'" onmouseout="this.style.background='#335a3a'">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908C16.658 14.121 17.64 11.834 17.64 9.2z" fill="#4285F4"/>
+          <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z" fill="#34A853"/>
+          <path d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957C.347 6.175 0 7.55 0 9s.348 2.825.957 4.039l3.007-2.332z" fill="#FBBC05"/>
+          <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z" fill="#EA4335"/>
+        </svg>
+        Sign in with Google
+      </button>
+      <p style="font-size:.72rem;color:#8faf9a;font-style:italic;line-height:1.6;">
+        Your plans are saved securely to your account.<br>No credit card required to sign in.
+      </p>
+    </div>
+  </div>
+</div>
+
+<div id="app-content" style="display:none;">
 <div class="hero">
   <div class="hero-badge">AI-Powered Floor Plans</div>
   <h1>Design your space <em>the way you actually live</em></h1>
@@ -1054,6 +1099,7 @@
     </div>
   </div><!-- /result-section -->
 </div><!-- /app-shell -->
+</div><!-- /app-content -->
 
 <!-- MY PLANS DRAWER -->
 <div class="drawer-overlay" id="drawer-overlay" onclick="closePlansDrawer()"></div>
@@ -1073,16 +1119,22 @@
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   function updateAuthUI(user) {
-    const out     = document.getElementById('auth-signed-out');
-    const inn     = document.getElementById('auth-signed-in');
-    const saveBtn = document.getElementById('save-btn');
+    const out       = document.getElementById('auth-signed-out');
+    const inn       = document.getElementById('auth-signed-in');
+    const saveBtn   = document.getElementById('save-btn');
+    const loginScr  = document.getElementById('login-screen');
+    const appCont   = document.getElementById('app-content');
     if (user) {
+      loginScr.style.display = 'none';
+      appCont.style.display  = 'block';
       out.style.display = 'none';
       inn.style.display = 'flex';
       document.getElementById('user-avatar').textContent = (user.displayName || user.email || '?')[0].toUpperCase();
       document.getElementById('user-name').textContent   = user.displayName || user.email;
       if (saveBtn && currentPlan) saveBtn.classList.add('visible');
     } else {
+      loginScr.style.display = 'flex';
+      appCont.style.display  = 'none';
       out.style.display = 'flex';
       inn.style.display = 'none';
       if (saveBtn) saveBtn.classList.remove('visible');
