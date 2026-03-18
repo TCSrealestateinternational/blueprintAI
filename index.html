@@ -10,7 +10,8 @@
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
   import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
     from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-  import { getFirestore, collection, addDoc, query, orderBy, getDocs, serverTimestamp }
+  import { getFirestore, collection, addDoc, query, orderBy, getDocs, serverTimestamp,
+           doc, getDoc, setDoc }
     from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
   const firebaseConfig = {
@@ -29,11 +30,13 @@
 
   window._fb = { auth, db, provider, GoogleAuthProvider,
     signInWithPopup, signOut, onAuthStateChanged,
-    collection, addDoc, query, orderBy, getDocs, serverTimestamp };
+    collection, addDoc, query, orderBy, getDocs, serverTimestamp,
+    doc, getDoc, setDoc };
 
   onAuthStateChanged(auth, user => {
     window._currentUser = user || null;
     if (typeof updateAuthUI === 'function') updateAuthUI(user);
+    if (typeof loadGenerationBadge === 'function') loadGenerationBadge(user);
   });
 </script>
 
@@ -370,6 +373,49 @@ textarea { resize: vertical; min-height: 110px; }
 .toast.show { display: flex; }
 .toast.success { border-color: var(--success); color: var(--success); }
 .toast.error   { border-color: var(--danger);  color: var(--danger); }
+
+/* ── Generation badge ── */
+.gen-badge {
+  font-size: .78rem; color: var(--text-muted);
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 999px; padding: .25rem .7rem;
+  display: none; align-items: center; gap: .35rem;
+}
+.gen-badge.visible { display: flex; }
+.gen-badge .gen-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); flex-shrink: 0; }
+.gen-badge.warn .gen-dot { background: var(--warning); }
+.gen-badge.out  .gen-dot { background: var(--danger); }
+
+/* ── Paywall modal ── */
+.paywall-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.65);
+  z-index: 600; display: none; align-items: center; justify-content: center;
+}
+.paywall-overlay.open { display: flex; }
+.paywall-modal {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 2.5rem 2rem; max-width: 420px; width: 90%;
+  text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.6);
+}
+.paywall-icon { font-size: 3rem; margin-bottom: 1rem; }
+.paywall-modal h2 { font-size: 1.4rem; margin-bottom: .6rem; }
+.paywall-modal p { color: var(--text-muted); font-size: .92rem; line-height: 1.6; margin-bottom: .5rem; }
+.paywall-reset { font-size: .82rem !important; margin-bottom: 1.75rem !important; }
+.paywall-cta {
+  display: inline-flex; align-items: center; gap: .5rem;
+  background: linear-gradient(135deg, var(--forest), var(--deep));
+  color: var(--text); border: none; border-radius: 8px;
+  padding: .8rem 1.75rem; font-size: .95rem; font-weight: 700;
+  cursor: pointer; text-decoration: none; margin-bottom: .65rem;
+  transition: opacity .15s; width: 100%; justify-content: center;
+}
+.paywall-cta:hover { opacity: .88; }
+.paywall-dismiss {
+  background: none; border: 1px solid var(--border); color: var(--text-muted);
+  border-radius: 8px; padding: .6rem 1.5rem; font-size: .875rem;
+  cursor: pointer; width: 100%; transition: border-color .15s;
+}
+.paywall-dismiss:hover { border-color: var(--sage); color: var(--text); }
 </style>
 </head>
 
@@ -394,6 +440,7 @@ textarea { resize: vertical; min-height: 110px; }
       <button class="btn-nav" onclick="signIn()">Sign In with Google</button>
     </div>
     <div id="auth-signed-in">
+      <div class="gen-badge" id="gen-badge"><span class="gen-dot"></span><span id="gen-badge-text">3 generations left</span></div>
       <button class="btn-nav secondary" onclick="openPlansDrawer()">My Plans</button>
       <div class="user-chip">
         <div class="avatar" id="user-avatar">?</div>
@@ -675,6 +722,20 @@ textarea { resize: vertical; min-height: 110px; }
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
+<!-- PAYWALL MODAL -->
+<div class="paywall-overlay" id="paywall-overlay">
+  <div class="paywall-modal">
+    <div class="paywall-icon">📐</div>
+    <h2>Monthly Limit Reached</h2>
+    <p>You've used all <strong>3 free floor plan generations</strong> for this month.</p>
+    <p class="paywall-reset">Your free generations reset on <strong id="paywall-reset-date"></strong>.</p>
+    <a href="https://d4acip2ba5ltc7t8cubb.app.clientclub.net/" target="_blank" class="paywall-cta">
+      ✨ Upgrade to Unlimited Access
+    </a>
+    <button class="paywall-dismiss" onclick="closePaywall()">Maybe next month</button>
+  </div>
+</div>
+
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
 const state = {
@@ -694,6 +755,103 @@ const state = {
   currentFloor: 0,
   uploadMode: 'photo',
 };
+
+// ── Config ────────────────────────────────────────────────────────────────
+const FREE_LIMIT    = 3;   // free generations per month
+// TODO: update MEMBERSHIP_URL to your actual pricing/checkout page
+const MEMBERSHIP_URL = 'https://d4acip2ba5ltc7t8cubb.app.clientclub.net/';
+
+// ── Generation limit helpers ───────────────────────────────────────────────
+function billingMonthKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function nextMonthFirst() {
+  const d   = new Date();
+  const nm  = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+  return nm.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+async function getUserDoc() {
+  if (!window._currentUser || !window._fb) return null;
+  const { db, doc, getDoc } = window._fb;
+  const snap = await getDoc(doc(db, 'users', window._currentUser.uid));
+  return snap.exists() ? snap.data() : {};
+}
+
+async function loadGenerationBadge(user) {
+  const badge = document.getElementById('gen-badge');
+  if (!badge) return;
+  if (!user) { badge.classList.remove('visible'); return; }
+  try {
+    const data    = await getUserDoc() || {};
+    const month   = billingMonthKey();
+    const used    = data.billingMonth === month ? (data.generationsThisMonth || 0) : 0;
+    const isPro   = data.isPro || false;
+    badge.classList.add('visible');
+    if (isPro) {
+      badge.classList.remove('warn', 'out');
+      document.getElementById('gen-badge-text').textContent = 'Unlimited ✓';
+    } else {
+      const left = Math.max(0, FREE_LIMIT - used);
+      document.getElementById('gen-badge-text').textContent = `${left} generation${left !== 1 ? 's' : ''} left`;
+      badge.classList.toggle('warn', left === 1);
+      badge.classList.toggle('out',  left === 0);
+    }
+  } catch { badge.classList.remove('visible'); }
+}
+
+// Returns true if allowed to generate, false if blocked.
+// On success, increments the Firestore counter.
+async function checkAndIncrementGeneration() {
+  if (!window._currentUser || !window._fb) {
+    showToast('Sign in to generate floor plans.', 'error');
+    return false;
+  }
+  const { db, doc, getDoc, setDoc } = window._fb;
+  const uid   = window._currentUser.uid;
+  const month = billingMonthKey();
+  try {
+    const snap = await getDoc(doc(db, 'users', uid));
+    const data = snap.exists() ? snap.data() : {};
+
+    // Pro users: unlimited
+    if (data.isPro) return true;
+
+    // Reset count if new month
+    const used = data.billingMonth === month ? (data.generationsThisMonth || 0) : 0;
+
+    if (used >= FREE_LIMIT) {
+      showPaywall();
+      return false;
+    }
+
+    // Increment
+    await setDoc(doc(db, 'users', uid), {
+      generationsThisMonth: used + 1,
+      billingMonth: month,
+      isPro: false,
+    }, { merge: true });
+
+    // Refresh badge
+    loadGenerationBadge(window._currentUser);
+    return true;
+  } catch (e) {
+    // If Firestore fails, don't block generation — fail open
+    console.warn('Generation limit check failed:', e.message);
+    return true;
+  }
+}
+
+function showPaywall() {
+  document.getElementById('paywall-reset-date').textContent = nextMonthFirst();
+  document.getElementById('paywall-overlay').classList.add('open');
+}
+
+function closePaywall() {
+  document.getElementById('paywall-overlay').classList.remove('open');
+}
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 function updateAuthUI(user) {
@@ -935,6 +1093,11 @@ function completeLoadingAnimation() {
 // ── Generate ───────────────────────────────────────────────────────────────
 async function generatePlan() {
   collectCurrentStep(3);
+
+  // ── Check sign-in + generation limit ──
+  const allowed = await checkAndIncrementGeneration();
+  if (!allowed) return;
+
   document.querySelector('.wizard-wrap').style.display      = 'none';
   document.getElementById('generate-loading').style.display = 'block';
   document.getElementById('result-section').style.display   = 'none';
