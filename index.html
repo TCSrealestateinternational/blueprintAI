@@ -1009,7 +1009,7 @@ async function analyzePhoto() {
     }
     document.getElementById('photo-next-btn').style.display = 'inline-flex';
   } catch (e) {
-    showToast('Analysis failed: ' + e.message, 'error');
+    showToast(friendlyError(e.message), 'error');
   } finally {
     btn.disabled = false;
     spinner.style.display = 'none';
@@ -1199,7 +1199,7 @@ STRICT RULES:
 
   } catch (e) {
     clearInterval(_loadInterval);
-    showToast('Generation failed: ' + e.message, 'error');
+    showToast(friendlyError(e.message), 'error');
     document.querySelector('.wizard-wrap').style.display      = '';
     document.getElementById('generate-loading').style.display = 'none';
   }
@@ -1587,7 +1587,7 @@ Return the COMPLETE updated plan as a JSON object in exactly the same format. En
     document.getElementById('refine-input').value = '';
     showToast('Plan refined!', 'success');
   } catch (e) {
-    showToast('Refinement failed: ' + e.message, 'error');
+    showToast(friendlyError(e.message), 'error');
   } finally {
     btn.disabled = false;
     spinner.style.display = 'none';
@@ -1795,6 +1795,24 @@ function startOver() {
   document.getElementById('auth-save-btn').classList.remove('visible');
   goToStep(0);
   clearPhoto();
+}
+
+// Translate raw Anthropic/server errors into user-friendly messages
+function friendlyError(raw) {
+  const msg = (raw || '').toLowerCase();
+  if (msg.includes('credit') || msg.includes('balance') || msg.includes('billing'))
+    return 'Service is temporarily unavailable. Please try again later.';
+  if (msg.includes('rate limit') || msg.includes('too many request') || msg.includes('529'))
+    return 'Too many requests right now — please wait a moment and try again.';
+  if (msg.includes('overloaded') || msg.includes('capacity'))
+    return 'AI service is busy right now. Please try again in a few seconds.';
+  if (msg.includes('timeout') || msg.includes('timed out'))
+    return 'The request took too long. Please try again.';
+  if (msg.includes('invalid') && msg.includes('key'))
+    return 'Service configuration error. Please contact support.';
+  if (msg.includes('parse') || msg.includes('json'))
+    return 'Received an unexpected response. Please try again.';
+  return 'Something went wrong — please try again.';
 }
 
 let _toastTimer;
