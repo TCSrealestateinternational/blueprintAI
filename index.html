@@ -2,15 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>BlueprintAI — Design Your Space</title>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=PT+Serif:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BlueprintAI — AI Floor Plan Generator</title>
 
-<!-- Firebase CDN -->
+<!-- Firebase CDN (no duplicate import) -->
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
-    createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail }
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
     from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
   import { getFirestore, collection, addDoc, query, orderBy, getDocs, serverTimestamp }
     from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -31,1146 +29,627 @@
 
   window._fb = { auth, db, provider, GoogleAuthProvider,
     signInWithPopup, signOut, onAuthStateChanged,
-    createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail,
     collection, addDoc, query, orderBy, getDocs, serverTimestamp };
 
   onAuthStateChanged(auth, user => {
     window._currentUser = user || null;
-    updateAuthUI(user);
+    if (typeof updateAuthUI === 'function') updateAuthUI(user);
   });
 </script>
 
 <style>
-  :root {
-    --ink:     #335a3a;
-    --ink-deep:#2a4830;
-    --paper:   #fefdfe;
-    --cream:   #d8d2c8;
-    --sage:    #668c66;
-    --mist:    #8faf9a;
-    --accent:  #3f5d4a;
-    --accent2: #668c66;
-    --line:    #335a3a;
-    --muted:   #8faf9a;
-    --white:   #fefdfe;
-    --success: #335a3a;
-    --bg:      #fefdfe;
-    --card-bg: #f7f5f1;
-    --border:  #d8d2c8;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: 'PT Serif', serif;
-    background: var(--bg);
-    color: var(--ink);
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-  /* --- HEADER --- */
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 1.2rem 2.5rem;
-    border-bottom: 1px solid var(--border);
-    position: sticky;
-    top: 0;
-    background: rgba(254,253,254,0.97);
-    backdrop-filter: blur(10px);
-    z-index: 100;
-  }
-  .logo {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-  }
-  .logo-icon {
-    width: 36px;
-    height: 36px;
-    background: var(--ink);
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.1rem;
-  }
-  .logo-text {
-    font-family: 'Cormorant', serif;
-    font-size: 1.5rem;
-    font-weight: 500;
-    letter-spacing: 0.01em;
-    color: var(--ink);
-  }
-  .logo-text span { color: var(--sage); }
-  nav { display: flex; gap: 1.5rem; align-items: center; }
-  nav a {
-    color: var(--sage);
-    text-decoration: none;
-    font-family: 'PT Serif', serif;
-    font-size: 0.82rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    transition: color 0.2s;
-  }
-  nav a:hover { color: var(--ink); }
-  .btn-nav {
-    background: var(--ink);
-    color: var(--paper) !important;
-    padding: 0.45rem 1.1rem;
-    border-radius: 4px;
-    font-family: 'PT Serif', serif;
-    cursor: pointer;
-    border: none;
-    font-size: 0.82rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    transition: background 0.2s;
-  }
-  .btn-nav:hover { background: var(--ink-deep); }
-  .btn-nav.ghost {
-    background: transparent;
-    color: var(--sage) !important;
-    border: 1px solid var(--border);
-  }
-  .btn-nav.ghost:hover { background: var(--card-bg); }
-  .user-chip {
-    display: flex; align-items: center; gap: 0.5rem;
-    font-size: 0.82rem; color: var(--sage);
-    font-family: 'PT Serif', serif;
-  }
-  .avatar {
-    width: 30px; height: 30px; border-radius: 50%;
-    background: var(--ink);
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 0.78rem; color: var(--paper);
-    font-family: 'Cormorant', serif;
-  }
-  #auth-signed-out { display: flex; gap: 0.5rem; }
-  #auth-signed-in  { display: none; align-items: center; gap: 0.75rem; }
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:        #0f1117;
+  --surface:   #1a1d27;
+  --surface2:  #22263a;
+  --border:    #2e3348;
+  --accent:    #4f8ef7;
+  --accent2:   #7c3aed;
+  --success:   #22c55e;
+  --warning:   #f59e0b;
+  --danger:    #ef4444;
+  --text:      #e8eaf0;
+  --text-muted:#8892a4;
+  --radius:    10px;
+  --shadow:    0 4px 24px rgba(0,0,0,.45);
+}
+html { font-size: 16px; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, sans-serif;
+  min-height: 100vh;
+  line-height: 1.6;
+}
 
-  /* --- HERO --- */
-  .hero {
-    text-align: center;
-    padding: 5rem 2rem 3rem;
-    position: relative;
-    overflow: hidden;
-    background: var(--bg);
-  }
-  .hero::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: radial-gradient(ellipse at 50% 0%, rgba(102,140,102,0.1) 0%, transparent 65%);
-    pointer-events: none;
-  }
-  .hero::after {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background-image:
-      linear-gradient(rgba(51,90,58,0.06) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(51,90,58,0.06) 1px, transparent 1px);
-    background-size: 40px 40px;
-    pointer-events: none;
-  }
-  .hero-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    background: rgba(102,140,102,0.12);
-    border: 1px solid rgba(102,140,102,0.3);
-    color: var(--sage);
-    padding: 0.3rem 0.8rem;
-    border-radius: 20px;
-    font-family: 'PT Serif', serif;
-    font-size: 0.75rem;
-    font-weight: 400;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    margin-bottom: 1.5rem;
-    position: relative;
-    z-index: 1;
-  }
-  .hero h1 {
-    font-family: 'Cormorant', serif;
-    font-size: clamp(2.6rem, 5vw, 4.2rem);
-    font-weight: 400;
-    line-height: 1.1;
-    letter-spacing: -0.01em;
-    max-width: 700px;
-    margin: 0 auto 1.2rem;
-    position: relative;
-    z-index: 1;
-    color: var(--ink);
-  }
-  .hero h1 em {
-    font-style: italic;
-    color: var(--sage);
-  }
-  .hero p {
-    color: var(--sage);
-    font-size: 1rem;
-    max-width: 500px;
-    margin: 0 auto 2.5rem;
-    line-height: 1.75;
-    position: relative;
-    z-index: 1;
-    font-family: 'PT Serif', serif;
-  }
-  /* --- MAIN APP --- */
-  .app-shell {
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 0 2rem 4rem;
-  }
-  /* Steps progress */
-  .steps-bar {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0;
-    margin-bottom: 2.5rem;
-    position: relative;
-  }
-  .step-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.4rem;
-    position: relative;
-    z-index: 1;
-  }
-  .step-dot {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    border: 2px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: 'Cormorant', serif;
-    font-size: 0.95rem;
-    font-weight: 500;
-    color: var(--cream);
-    background: var(--bg);
-    transition: all 0.3s;
-  }
-  .step-dot.active {
-    border-color: var(--sage);
-    color: var(--sage);
-    background: rgba(102,140,102,0.08);
-  }
-  .step-dot.done {
-    border-color: var(--ink);
-    background: var(--ink);
-    color: var(--paper);
-  }
-  .step-label {
-    font-family: 'PT Serif', serif;
-    font-size: 0.7rem;
-    color: var(--cream);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    white-space: nowrap;
-  }
-  .step-label.active { color: var(--ink); }
-  .step-line {
-    width: 80px;
-    height: 2px;
-    background: var(--border);
-    margin: 0 0.5rem;
-    margin-bottom: 1.4rem;
-    transition: background 0.3s;
-  }
-  .step-line.done { background: var(--ink); }
-  /* --- CARDS --- */
-  .card {
-    background: var(--card-bg);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 2rem;
-    margin-bottom: 1.5rem;
-    animation: fadeUp 0.4s ease both;
-  }
-  @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(16px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  .card-title {
-    font-family: 'Cormorant', serif;
-    font-size: 1.35rem;
-    font-weight: 500;
-    color: var(--ink);
-    margin-bottom: 0.4rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  .card-subtitle {
-    color: var(--sage);
-    font-family: 'PT Serif', serif;
-    font-size: 0.85rem;
-    margin-bottom: 1.5rem;
-    font-style: italic;
-  }
-  /* --- LOCATION SELECT --- */
-  .location-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-    margin-bottom: 1rem;
-  }
-  .field-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-  }
-  label {
-    font-family: 'PT Serif', serif;
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    color: var(--sage);
-  }
-  select, input[type="text"], textarea {
-    background: var(--paper);
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    color: var(--ink);
-    padding: 0.65rem 0.9rem;
-    font-family: 'PT Serif', serif;
-    font-size: 0.9rem;
-    transition: border-color 0.2s, background 0.2s;
-    outline: none;
-    width: 100%;
-  }
-  select:focus, input[type="text"]:focus, textarea:focus {
-    border-color: var(--sage);
-    background: rgba(143,175,154,0.06);
-  }
-  select option { background: var(--paper); color: var(--ink); }
-  textarea {
-    resize: vertical;
-    min-height: 130px;
-    line-height: 1.6;
-  }
-  /* --- PROMPTING HELPERS --- */
-  .prompt-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
-  }
-  .chip {
-    background: rgba(102,140,102,0.1);
-    border: 1px solid rgba(102,140,102,0.25);
-    color: var(--ink-deep);
-    padding: 0.3rem 0.75rem;
-    border-radius: 20px;
-    font-family: 'PT Serif', serif;
-    font-size: 0.75rem;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .chip:hover {
-    background: rgba(102,140,102,0.2);
-    border-color: var(--sage);
-  }
-  /* --- PROJECT TYPE GRID --- */
-  .type-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.75rem;
-    margin-bottom: 1rem;
-  }
-  .type-card {
-    background: var(--paper);
-    border: 2px solid var(--border);
-    border-radius: 8px;
-    padding: 1rem;
-    cursor: pointer;
-    transition: all 0.2s;
-    text-align: center;
-  }
-  .type-card:hover {
-    border-color: var(--sage);
-    background: rgba(102,140,102,0.05);
-  }
-  .type-card.selected {
-    border-color: var(--ink);
-    background: rgba(51,90,58,0.06);
-  }
-  .type-card .icon { font-size: 1.8rem; margin-bottom: 0.4rem; }
-  .type-card .name { font-family: 'Cormorant', serif; font-size: 0.95rem; font-weight: 500; color: var(--ink); }
-  .type-card .desc { font-family: 'PT Serif', serif; font-size: 0.7rem; color: var(--sage); margin-top: 0.2rem; font-style: italic; }
-  /* --- CODE INFO BOX --- */
-  .code-info {
-    background: rgba(143,175,154,0.12);
-    border: 1px solid rgba(102,140,102,0.25);
-    border-radius: 8px;
-    padding: 1rem 1.2rem;
-    display: flex;
-    gap: 0.8rem;
-    align-items: flex-start;
-  }
-  .code-info .icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 0.1rem; }
-  .code-info-text h4 {
-    font-family: 'Cormorant', serif;
-    font-size: 0.95rem;
-    font-weight: 500;
-    margin-bottom: 0.25rem;
-    color: var(--ink);
-  }
-  .code-info-text p {
-    font-family: 'PT Serif', serif;
-    font-size: 0.78rem;
-    color: var(--sage);
-    line-height: 1.5;
-    font-style: italic;
-  }
-  /* --- GENERATE BUTTON --- */
-  .btn-generate {
-    width: 100%;
-    background: var(--ink);
-    color: var(--paper);
-    border: none;
-    border-radius: 7px;
-    padding: 1rem 2rem;
-    font-family: 'Cormorant', serif;
-    font-size: 1.1rem;
-    font-weight: 500;
-    letter-spacing: 0.04em;
-    cursor: pointer;
-    transition: all 0.25s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
-    position: relative;
-    overflow: hidden;
-  }
-  .btn-generate:hover {
-    background: var(--ink-deep);
-    transform: translateY(-1px);
-    box-shadow: 0 6px 20px rgba(51,90,58,0.25);
-  }
-  .btn-generate:active { transform: translateY(0); }
-  .btn-generate:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-  /* --- GENERATING STATES --- */
-  .generating-overlay {
-    display: none;
-    flex-direction: column;
-    align-items: center;
-    gap: 1rem;
-    padding: 3rem 2rem;
-    text-align: center;
-  }
-  .generating-overlay.visible { display: flex; }
-  .blueprint-spinner {
-    width: 80px;
-    height: 80px;
-    position: relative;
-  }
-  .spinner-ring {
-    position: absolute;
-    inset: 0;
-    border-radius: 50%;
-    border: 3px solid transparent;
-    border-top-color: var(--sage);
-    animation: spin 1s linear infinite;
-  }
-  .spinner-ring:nth-child(2) {
-    inset: 8px;
-    border-top-color: var(--mist);
-    animation-duration: 1.4s;
-    animation-direction: reverse;
-  }
-  .spinner-ring:nth-child(3) {
-    inset: 16px;
-    border-top-color: var(--ink);
-    animation-duration: 1.8s;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .gen-steps {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-    text-align: left;
-    min-width: 260px;
-  }
-  .gen-step {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    font-family: 'PT Serif', serif;
-    font-size: 0.85rem;
-    color: var(--cream);
-    transition: color 0.3s;
-  }
-  .gen-step.active { color: var(--ink); }
-  .gen-step.done { color: var(--sage); }
-  .gen-step-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: var(--border);
-    flex-shrink: 0;
-  }
-  .gen-step.active .gen-step-dot { background: var(--sage); animation: pulse 0.8s ease infinite alternate; }
-  .gen-step.done .gen-step-dot { background: var(--ink); }
-  @keyframes pulse { to { transform: scale(1.4); opacity: 0.7; } }
-  /* --- RESULT AREA --- */
-  #result-section { display: none; }
-  #result-section.visible { display: block; }
-  .result-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 1.5rem;
-    flex-wrap: wrap;
-    gap: 1rem;
-  }
-  .result-title {
-    font-family: 'Cormorant', serif;
-    font-size: 1.7rem;
-    font-weight: 400;
-    color: var(--ink);
-  }
-  .export-bar {
-    display: flex;
-    gap: 0.6rem;
-    flex-wrap: wrap;
-  }
-  .btn-export {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.5rem 1rem;
-    border-radius: 5px;
-    font-family: 'PT Serif', serif;
-    font-size: 0.78rem;
-    cursor: pointer;
-    border: 1px solid;
-    transition: all 0.2s;
-  }
-  .btn-pdf {
-    background: rgba(51,90,58,0.08);
-    border-color: rgba(51,90,58,0.25);
-    color: var(--ink);
-  }
-  .btn-pdf:hover { background: rgba(51,90,58,0.15); }
-  .btn-dxf {
-    background: rgba(102,140,102,0.1);
-    border-color: rgba(102,140,102,0.3);
-    color: var(--sage);
-  }
-  .btn-dxf:hover { background: rgba(102,140,102,0.2); }
-  .btn-autocad {
-    background: rgba(143,175,154,0.12);
-    border-color: rgba(143,175,154,0.3);
-    color: var(--ink);
-  }
-  .btn-autocad:hover { background: rgba(143,175,154,0.22); }
-  .btn-archsynth {
-    background: rgba(63,93,74,0.1);
-    border-color: rgba(63,93,74,0.3);
-    color: var(--accent);
-  }
-  .btn-archsynth:hover { background: rgba(63,93,74,0.2); }
-  .btn-save {
-    background: rgba(51,90,58,0.12);
-    border-color: var(--ink);
-    color: var(--ink);
-    display: none;
-  }
-  .btn-save.visible { display: flex; }
-  .btn-save:hover { background: var(--ink); color: var(--paper); }
-  /* --- BLUEPRINT CANVAS --- */
-  .blueprint-canvas {
-    background: #0d1f12;
-    border: 1px solid rgba(102,140,102,0.3);
-    border-radius: 10px;
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-    position: relative;
-    overflow: hidden;
-    min-height: 500px;
-  }
-  .blueprint-canvas::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-image:
-      linear-gradient(rgba(102,140,102,0.08) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(102,140,102,0.08) 1px, transparent 1px);
-    background-size: 30px 30px;
-  }
-  .bp-svg {
-    position: relative;
-    z-index: 1;
-    width: 100%;
-    height: 500px;
-  }
-  /* --- ROOM LABELS on SVG --- */
-  .room-fill { fill: rgba(102,140,102,0.12); }
-  .room-stroke { stroke: rgba(143,200,160,0.7); stroke-width: 2; fill: none; }
-  .room-label { fill: rgba(200,240,210,0.9); font-size: 11px; font-family: 'PT Serif', serif; text-anchor: middle; }
-  .dim-line { stroke: rgba(143,175,154,0.4); stroke-width: 1; stroke-dasharray: 4,3; }
-  .dim-text { fill: rgba(143,175,154,0.8); font-size: 9px; font-family: 'PT Serif', serif; text-anchor: middle; }
-  .door-arc { stroke: rgba(200,230,210,0.5); stroke-width: 1; fill: none; }
-  .compass { fill: rgba(143,175,154,0.6); }
-  .title-text { fill: rgba(200,240,210,0.9); font-family: 'Cormorant', serif; font-size: 14px; }
-  .scale-text { fill: rgba(143,175,154,0.7); font-family: 'PT Serif', serif; font-size: 9px; }
-  /* --- CODE COMPLIANCE PANEL --- */
-  .compliance-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0.75rem;
-    margin-bottom: 1.5rem;
-  }
-  .compliance-item {
-    background: var(--paper);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 0.9rem;
-    display: flex;
-    gap: 0.7rem;
-    align-items: flex-start;
-  }
-  .compliance-icon { font-size: 1.1rem; flex-shrink: 0; }
-  .compliance-text h5 {
-    font-family: 'Cormorant', serif;
-    font-size: 0.9rem;
-    font-weight: 500;
-    color: var(--ink);
-    margin-bottom: 0.2rem;
-  }
-  .compliance-text p {
-    font-family: 'PT Serif', serif;
-    font-size: 0.72rem;
-    color: var(--sage);
-    line-height: 1.4;
-    font-style: italic;
-  }
-  .badge-pass {
-    display: inline-block;
-    background: rgba(51,90,58,0.1);
-    color: var(--ink);
-    border: 1px solid rgba(51,90,58,0.2);
-    border-radius: 3px;
-    font-family: 'PT Serif', serif;
-    font-size: 0.65rem;
-    font-weight: 700;
-    padding: 0.1rem 0.4rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-top: 0.3rem;
-  }
-  /* --- AI SUMMARY --- */
-  .ai-summary {
-    background: rgba(143,175,154,0.08);
-    border: 1px solid rgba(102,140,102,0.2);
-    border-radius: 8px;
-    padding: 1.2rem;
-    margin-bottom: 1rem;
-    font-family: 'PT Serif', serif;
-    font-size: 0.9rem;
-    line-height: 1.75;
-    color: var(--ink);
-  }
-  .ai-summary strong { color: var(--ink-deep); font-weight: 700; }
-  /* --- ROOM BREAKDOWN TABLE --- */
-  .room-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-family: 'PT Serif', serif;
-    font-size: 0.82rem;
-    margin-top: 0.5rem;
-  }
-  .room-table th {
-    text-align: left;
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--sage);
-    border-bottom: 1px solid var(--border);
-    padding: 0.4rem 0.6rem;
-    font-weight: 700;
-  }
-  .room-table td {
-    padding: 0.55rem 0.6rem;
-    border-bottom: 1px solid rgba(216,210,200,0.5);
-    color: var(--ink);
-  }
-  .room-table tr:last-child td { border-bottom: none; }
-  .tag {
-    display: inline-block;
-    background: rgba(102,140,102,0.1);
-    border: 1px solid rgba(102,140,102,0.2);
-    color: var(--sage);
-    border-radius: 3px;
-    font-size: 0.65rem;
-    padding: 0.1rem 0.4rem;
-    font-style: italic;
-  }
-  /* --- INTEGRATION SECTION --- */
-  .integration-row {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.75rem;
-  }
-  .integration-card {
-    background: var(--paper);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 1rem;
-    text-align: center;
-  }
-  .integration-card .int-icon { font-size: 1.6rem; margin-bottom: 0.4rem; }
-  .integration-card h5 { font-family: 'Cormorant', serif; font-size: 0.95rem; font-weight: 500; color: var(--ink); margin-bottom: 0.3rem; }
-  .integration-card p { font-family: 'PT Serif', serif; font-size: 0.72rem; color: var(--sage); font-style: italic; }
-  .btn-connect {
-    display: inline-block;
-    margin-top: 0.6rem;
-    padding: 0.3rem 0.8rem;
-    border-radius: 4px;
-    font-family: 'PT Serif', serif;
-    font-size: 0.72rem;
-    cursor: pointer;
-    border: 1px solid var(--border);
-    background: var(--card-bg);
-    color: var(--sage);
-    transition: all 0.2s;
-  }
-  .btn-connect:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-  /* --- MY PLANS DRAWER --- */
-  .drawer-overlay {
-    position: fixed; inset: 0; background: rgba(51,90,58,0.35); z-index: 200;
-    display: none; opacity: 0; transition: opacity .2s;
-  }
-  .drawer-overlay.open { display: block; opacity: 1; }
-  .drawer {
-    position: fixed; top: 0; right: 0; height: 100vh; width: 340px; max-width: 92vw;
-    background: var(--paper); border-left: 1px solid var(--border);
-    z-index: 201; transform: translateX(100%); transition: transform .25s ease;
-    display: flex; flex-direction: column;
-  }
-  .drawer.open { transform: translateX(0); }
-  .drawer-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border);
-  }
-  .drawer-header h2 { font-family: 'Cormorant', serif; font-size: 1.2rem; font-weight: 500; color: var(--ink); }
-  .drawer-close { background: none; border: none; color: var(--sage); font-size: 1.3rem; cursor: pointer; }
-  .drawer-body { flex: 1; overflow-y: auto; padding: 1rem 1.5rem; }
-  .plan-card-saved {
-    background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px;
-    padding: 1rem; margin-bottom: 0.75rem; cursor: pointer; transition: border-color .15s;
-  }
-  .plan-card-saved:hover { border-color: var(--sage); }
-  .plan-card-saved h4 { font-family: 'Cormorant', serif; font-size: 1rem; font-weight: 500; color: var(--ink); margin-bottom: 0.2rem; }
-  .plan-card-saved .meta { font-size: 0.75rem; color: var(--sage); font-family: 'PT Serif', serif; font-style: italic; }
-  .drawer-empty { color: var(--sage); font-size: 0.85rem; text-align: center; padding: 2rem 0; font-family: 'PT Serif', serif; font-style: italic; }
-  /* --- HIDDEN / VISIBLE --- */
-  .hidden { display: none !important; }
-  /* --- RESPONSIVE --- */
-  @media (max-width: 640px) {
-    header { padding: 1rem 1.2rem; }
-    nav { display: none; }
-    .hero { padding: 3rem 1.2rem 2rem; }
-    .app-shell { padding: 0 1rem 3rem; }
-    .type-grid { grid-template-columns: repeat(2, 1fr); }
-    .location-row { grid-template-columns: 1fr; }
-    .compliance-grid { grid-template-columns: 1fr; }
-    .integration-row { grid-template-columns: 1fr; }
-    .export-bar { justify-content: stretch; }
-    .btn-export { flex: 1; justify-content: center; }
-    .step-line { width: 40px; }
-  }
+/* ── Typography ── */
+h1,h2,h3 { font-weight: 700; line-height: 1.2; }
+a { color: var(--accent); text-decoration: none; }
+
+/* ── Nav ── */
+nav {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .85rem 2rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 100;
+}
+.nav-brand { display: flex; align-items: center; gap: .6rem; font-weight: 700; font-size: 1.15rem; }
+.nav-brand svg { width: 28px; height: 28px; }
+.nav-actions { display: flex; align-items: center; gap: 1rem; }
+.btn-nav {
+  background: var(--accent); color: #fff; border: none; border-radius: 6px;
+  padding: .45rem 1rem; font-size: .875rem; font-weight: 600; cursor: pointer;
+  transition: opacity .15s;
+}
+.btn-nav:hover { opacity: .85; }
+.btn-nav.secondary { background: var(--surface2); border: 1px solid var(--border); color: var(--text); }
+.user-chip { display: flex; align-items: center; gap: .5rem; font-size: .875rem; cursor: default; }
+.avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: .8rem; color: #fff;
+}
+#auth-signed-out { display: flex; gap: .5rem; }
+#auth-signed-in  { display: none; align-items: center; gap: .75rem; }
+
+/* ── Hero ── */
+.hero {
+  text-align: center;
+  padding: 5rem 1rem 3rem;
+  background: radial-gradient(ellipse at 50% 0%, rgba(79,142,247,.15) 0%, transparent 70%);
+}
+.hero h1 { font-size: clamp(2rem, 5vw, 3.2rem); margin-bottom: .75rem; }
+.hero h1 span { background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.hero p { color: var(--text-muted); max-width: 540px; margin: 0 auto 2rem; font-size: 1.05rem; }
+.badge-row { display: flex; gap: .6rem; justify-content: center; flex-wrap: wrap; margin-bottom: 2.5rem; }
+.badge {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 999px; padding: .3rem .85rem;
+  font-size: .78rem; color: var(--text-muted);
+}
+
+/* ── Wizard Card ── */
+.wizard-wrap { max-width: 720px; margin: 0 auto 4rem; padding: 0 1rem; }
+
+/* Progress Bar */
+.progress-bar {
+  display: flex; gap: 0; margin-bottom: 2rem;
+  border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border);
+}
+.progress-step {
+  flex: 1; padding: .55rem .4rem; text-align: center;
+  font-size: .73rem; font-weight: 600; color: var(--text-muted);
+  background: var(--surface); transition: background .2s, color .2s;
+  border-right: 1px solid var(--border);
+}
+.progress-step:last-child { border-right: none; }
+.progress-step.active   { background: var(--accent); color: #fff; }
+.progress-step.complete { background: var(--surface2); color: var(--success); }
+
+/* Step Card */
+.step-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 2rem; display: none;
+}
+.step-card.active { display: block; }
+.step-card h2 { font-size: 1.25rem; margin-bottom: .35rem; }
+.step-card p.sub { color: var(--text-muted); font-size: .9rem; margin-bottom: 1.5rem; }
+
+/* Upload mode toggle */
+.upload-mode-toggle {
+  display: flex; margin-bottom: 1.1rem;
+  border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+}
+.mode-btn {
+  flex: 1; background: var(--surface2); border: none; color: var(--text-muted);
+  padding: .6rem .75rem; font-size: .875rem; font-weight: 600;
+  cursor: pointer; transition: background .15s, color .15s;
+}
+.mode-btn:hover { background: var(--border); color: var(--text); }
+.mode-btn.active { background: var(--accent); color: #fff; }
+
+/* Form Controls */
+.option-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: .75rem; margin-bottom: 1.5rem; }
+.option-btn {
+  background: var(--surface2); border: 2px solid var(--border);
+  border-radius: var(--radius); padding: .9rem .5rem;
+  text-align: center; cursor: pointer; transition: border-color .15s, background .15s;
+  font-size: .85rem; font-weight: 600; color: var(--text);
+}
+.option-btn:hover   { border-color: var(--accent); background: rgba(79,142,247,.08); }
+.option-btn.selected { border-color: var(--accent); background: rgba(79,142,247,.15); color: var(--accent); }
+.option-btn .icon { font-size: 1.6rem; display: block; margin-bottom: .4rem; }
+
+label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: .4rem; color: var(--text-muted); }
+input[type="text"], input[type="number"], select, textarea {
+  width: 100%; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 7px; padding: .65rem .85rem; color: var(--text);
+  font-size: .95rem; font-family: inherit; outline: none;
+  transition: border-color .15s;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+textarea { resize: vertical; min-height: 110px; }
+.row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+.row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+.field { margin-bottom: 1rem; }
+
+/* Chips */
+.chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: 1rem; }
+.chip {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 999px; padding: .25rem .75rem; font-size: .77rem;
+  color: var(--text-muted); cursor: pointer; transition: border-color .15s, color .15s, background .15s;
+  user-select: none;
+}
+.chip:hover { border-color: var(--accent); color: var(--accent); background: rgba(79,142,247,.07); }
+
+/* Photo Upload */
+.photo-drop {
+  border: 2px dashed var(--border); border-radius: var(--radius);
+  padding: 2.5rem 1rem; text-align: center; cursor: pointer;
+  transition: border-color .2s, background .2s; margin-bottom: 1rem;
+}
+.photo-drop:hover, .photo-drop.dragover { border-color: var(--accent); background: rgba(79,142,247,.06); }
+.photo-drop .drop-icon { font-size: 2.5rem; margin-bottom: .5rem; display: block; }
+.photo-drop p { color: var(--text-muted); font-size: .9rem; }
+.photo-preview { position: relative; display: none; margin-bottom: 1rem; }
+.photo-preview img { width: 100%; max-height: 220px; object-fit: cover; border-radius: var(--radius); }
+.photo-preview .remove-photo {
+  position: absolute; top: .4rem; right: .4rem;
+  background: rgba(0,0,0,.7); border: none; color: #fff;
+  border-radius: 50%; width: 26px; height: 26px; cursor: pointer; font-size: 1rem;
+  display: flex; align-items: center; justify-content: center;
+}
+.ai-badge {
+  display: none; background: rgba(79,142,247,.12); border: 1px solid rgba(79,142,247,.3);
+  border-radius: 6px; padding: .5rem .85rem; font-size: .82rem; color: var(--accent);
+  margin-bottom: 1rem;
+}
+
+/* Nav Buttons */
+.step-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 1.75rem; gap: 1rem; }
+.btn {
+  display: inline-flex; align-items: center; gap: .45rem;
+  border: none; border-radius: 8px; padding: .7rem 1.4rem;
+  font-size: .9rem; font-weight: 600; cursor: pointer; transition: opacity .15s;
+}
+.btn:hover { opacity: .85; }
+.btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; }
+.btn-ghost   { background: var(--surface2); border: 1px solid var(--border); color: var(--text); }
+.btn-danger  { background: var(--danger); color: #fff; }
+.btn-success { background: var(--success); color: #fff; }
+
+/* Spinner */
+.spinner {
+  width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.3);
+  border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite;
+  display: inline-block; flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Generate Loading ── */
+#generate-loading {
+  display: none; text-align: center; padding: 4rem 1rem;
+  max-width: 480px; margin: 0 auto;
+}
+.loading-icon {
+  font-size: 3rem; margin-bottom: 1rem;
+  animation: bob 2s ease-in-out infinite; display: inline-block;
+}
+@keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+#generate-loading h3 { font-size: 1.2rem; margin-bottom: .5rem; }
+#generate-loading .sub { color: var(--text-muted); font-size: .875rem; margin-bottom: 2rem; }
+.loading-steps { list-style: none; text-align: left; display: inline-block; min-width: 280px; }
+.lstep {
+  padding: .55rem 0; font-size: .9rem; color: var(--text-muted);
+  display: flex; align-items: center; gap: .8rem; transition: color .3s;
+}
+.lstep.active { color: var(--text); }
+.lstep.done   { color: var(--success); }
+.lstep-icon { width: 18px; text-align: center; font-size: .95rem; flex-shrink: 0; }
+
+/* ── Result Section ── */
+#result-section { display: none; max-width: 980px; margin: 0 auto 2rem; padding: 0 1rem; }
+.result-header {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem;
+}
+.result-header h2 { font-size: 1.4rem; }
+.export-bar { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+.btn-export {
+  background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+  border-radius: 7px; padding: .45rem .9rem; font-size: .8rem; font-weight: 600;
+  cursor: pointer; display: flex; align-items: center; gap: .35rem; transition: background .15s;
+}
+.btn-export:hover { background: var(--border); }
+.btn-export.save { border-color: var(--accent); color: var(--accent); display: none; }
+#auth-save-btn.visible { display: flex; }
+
+/* Floor tabs */
+#floor-tabs {
+  display: none; flex-direction: row; gap: .5rem;
+  margin-bottom: 1rem; flex-wrap: wrap;
+}
+.floor-tab {
+  background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted);
+  border-radius: 6px; padding: .45rem 1.1rem; font-size: .875rem; font-weight: 600;
+  cursor: pointer; transition: background .15s, color .15s, border-color .15s;
+}
+.floor-tab:hover { border-color: var(--accent); color: var(--text); }
+.floor-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.result-grid { display: grid; grid-template-columns: 1fr 320px; gap: 1.5rem; }
+@media (max-width: 720px) { .result-grid { grid-template-columns: 1fr; } }
+
+/* SVG Canvas */
+.svg-wrap {
+  background: #0a1628; border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; min-height: 420px;
+  display: flex; align-items: center; justify-content: center;
+}
+#floor-plan-svg { width: 100%; height: auto; display: block; }
+
+/* Details Panel */
+.details-panel { display: flex; flex-direction: column; gap: 1rem; }
+.panel-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 1.25rem;
+}
+.panel-card h3 { font-size: .85rem; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin-bottom: .85rem; }
+.room-list { list-style: none; display: flex; flex-direction: column; gap: .5rem; }
+.room-list li {
+  display: flex; justify-content: space-between;
+  font-size: .875rem; padding-bottom: .4rem; border-bottom: 1px solid var(--border);
+}
+.room-list li:last-child { border-bottom: none; padding-bottom: 0; }
+.room-name { font-weight: 600; }
+.room-sqft { color: var(--text-muted); }
+.compliance-list { list-style: none; display: flex; flex-direction: column; gap: .4rem; }
+.compliance-item { display: flex; align-items: flex-start; gap: .5rem; font-size: .85rem; }
+.compliance-item .dot { margin-top: .3rem; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dot.pass { background: var(--success); }
+.dot.warn { background: var(--warning); }
+.dot.fail { background: var(--danger); }
+.summary-text { font-size: .875rem; color: var(--text-muted); line-height: 1.65; }
+
+/* ── Refinement Section ── */
+#refine-section {
+  display: none; max-width: 980px; margin: 0 auto 4rem; padding: 0 1rem;
+}
+#refine-section .panel-card { background: var(--surface); }
+#refine-section p.sub { color: var(--text-muted); font-size: .875rem; margin-bottom: 1rem; }
+#refine-input { min-height: 80px; margin-bottom: .85rem; }
+
+/* ── My Plans Drawer ── */
+.drawer-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 200;
+  display: none; opacity: 0; transition: opacity .2s;
+}
+.drawer-overlay.open { display: block; opacity: 1; }
+.drawer {
+  position: fixed; top: 0; right: 0; height: 100vh; width: 360px; max-width: 92vw;
+  background: var(--surface); border-left: 1px solid var(--border);
+  z-index: 201; transform: translateX(100%); transition: transform .25s ease;
+  display: flex; flex-direction: column;
+}
+.drawer.open { transform: translateX(0); }
+.drawer-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border);
+}
+.drawer-header h2 { font-size: 1.1rem; }
+.drawer-close { background: none; border: none; color: var(--text-muted); font-size: 1.4rem; cursor: pointer; line-height: 1; }
+.drawer-body { flex: 1; overflow-y: auto; padding: 1rem 1.5rem; }
+.plan-card {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 1rem; margin-bottom: .75rem; cursor: pointer; transition: border-color .15s;
+}
+.plan-card:hover { border-color: var(--accent); }
+.plan-card h4 { font-size: .95rem; margin-bottom: .25rem; }
+.plan-card .meta { font-size: .78rem; color: var(--text-muted); }
+.drawer-empty { color: var(--text-muted); font-size: .9rem; text-align: center; padding: 2rem 0; }
+
+/* ── Toast ── */
+.toast {
+  position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 500;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; padding: .75rem 1.25rem; font-size: .875rem;
+  box-shadow: var(--shadow); display: none; align-items: center; gap: .5rem;
+}
+.toast.show { display: flex; }
+.toast.success { border-color: var(--success); color: var(--success); }
+.toast.error   { border-color: var(--danger);  color: var(--danger); }
 </style>
 </head>
+
 <body>
 
-<header>
-  <div class="logo">
-    <div class="logo-icon">📐</div>
-    <div class="logo-text">Blueprint<span>AI</span></div>
+<!-- NAV -->
+<nav>
+  <div class="nav-brand">
+    <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="28" height="28" rx="6" fill="url(#ng)"/>
+      <rect x="5" y="5" width="8" height="8" rx="1" fill="rgba(255,255,255,.85)"/>
+      <rect x="15" y="5" width="8" height="8" rx="1" fill="rgba(255,255,255,.5)"/>
+      <rect x="5" y="15" width="18" height="8" rx="1" fill="rgba(255,255,255,.65)"/>
+      <defs><linearGradient id="ng" x1="0" y1="0" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#4f8ef7"/><stop offset="1" stop-color="#7c3aed"/>
+      </linearGradient></defs>
+    </svg>
+    BlueprintAI
   </div>
-  <nav>
+  <div class="nav-actions">
     <div id="auth-signed-out">
-      <button class="btn-nav" onclick="document.getElementById('login-screen').style.display='flex'">Sign In</button>
+      <button class="btn-nav" onclick="signIn()">Sign In with Google</button>
     </div>
     <div id="auth-signed-in">
-      <button class="btn-nav ghost" onclick="openPlansDrawer()">My Plans</button>
+      <button class="btn-nav secondary" onclick="openPlansDrawer()">My Plans</button>
       <div class="user-chip">
         <div class="avatar" id="user-avatar">?</div>
         <span id="user-name"></span>
       </div>
-      <button class="btn-nav ghost" onclick="doSignOut()">Sign Out</button>
-    </div>
-  </nav>
-</header>
-
-<!-- ── LOGIN SCREEN ─────────────────────────────────────────── -->
-<div id="login-screen" style="position:fixed;inset:0;z-index:300;background:#fefdfe;display:flex;align-items:center;justify-content:center;font-family:'PT Serif',serif;">
-  <div style="background:#f7f5f1;border:1px solid #d8d2c8;border-radius:14px;padding:2.5rem 2.25rem;max-width:420px;width:90%;box-shadow:0 8px 40px rgba(51,90,58,0.12);position:relative;overflow:hidden;">
-    <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(51,90,58,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(51,90,58,0.04) 1px,transparent 1px);background-size:32px 32px;pointer-events:none;"></div>
-    <div style="position:relative;z-index:1;">
-
-      <!-- Branding -->
-      <div style="text-align:center;margin-bottom:1.75rem;">
-        <div style="width:48px;height:48px;background:#335a3a;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;margin:0 auto .9rem;">📐</div>
-        <div style="font-family:'Cormorant',serif;font-size:1.9rem;font-weight:500;color:#335a3a;">Blueprint<span style="color:#668c66;">AI</span></div>
-        <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;color:#8faf9a;margin-top:.2rem;">AI-Powered Floor Plans</div>
-      </div>
-
-      <!-- Tab toggle -->
-      <div style="display:flex;border:1px solid #d8d2c8;border-radius:7px;overflow:hidden;margin-bottom:1.5rem;">
-        <button id="tab-signin" onclick="switchTab('signin')" style="flex:1;padding:.55rem;font-family:'PT Serif',serif;font-size:.82rem;border:none;cursor:pointer;background:#335a3a;color:#fefdfe;font-weight:700;transition:background .15s;">Sign In</button>
-        <button id="tab-signup" onclick="switchTab('signup')" style="flex:1;padding:.55rem;font-family:'PT Serif',serif;font-size:.82rem;border:none;cursor:pointer;background:transparent;color:#668c66;transition:background .15s;">Create Account</button>
-      </div>
-
-      <!-- Error message -->
-      <div id="auth-error" style="display:none;background:rgba(180,50,50,0.08);border:1px solid rgba(180,50,50,0.25);color:#8b2020;border-radius:6px;padding:.55rem .85rem;font-size:.8rem;margin-bottom:1rem;font-family:'PT Serif',serif;"></div>
-
-      <!-- Email/Password form -->
-      <div style="margin-bottom:1rem;">
-        <label style="display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#668c66;margin-bottom:.35rem;">Email</label>
-        <input id="auth-email" type="email" placeholder="you@example.com" style="width:100%;background:#fefdfe;border:1px solid #d8d2c8;border-radius:5px;padding:.65rem .85rem;font-family:'PT Serif',serif;font-size:.9rem;color:#335a3a;outline:none;" onfocus="this.style.borderColor='#668c66'" onblur="this.style.borderColor='#d8d2c8'" onkeydown="if(event.key==='Enter')submitAuth()" />
-      </div>
-      <div style="margin-bottom:1.25rem;">
-        <label style="display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#668c66;margin-bottom:.35rem;">Password</label>
-        <input id="auth-password" type="password" placeholder="••••••••" style="width:100%;background:#fefdfe;border:1px solid #d8d2c8;border-radius:5px;padding:.65rem .85rem;font-family:'PT Serif',serif;font-size:.9rem;color:#335a3a;outline:none;" onfocus="this.style.borderColor='#668c66'" onblur="this.style.borderColor='#d8d2c8'" onkeydown="if(event.key==='Enter')submitAuth()" />
-      </div>
-
-      <!-- Submit button -->
-      <button id="auth-submit-btn" onclick="submitAuth()" style="width:100%;background:#335a3a;color:#fefdfe;border:none;border-radius:7px;padding:.85rem;font-family:'Cormorant',serif;font-size:1.05rem;font-weight:500;letter-spacing:.03em;cursor:pointer;margin-bottom:.75rem;transition:background .2s;" onmouseover="this.style.background='#2a4830'" onmouseout="this.style.background='#335a3a'">
-        Sign In
-      </button>
-
-      <!-- Forgot password -->
-      <div id="forgot-wrap" style="text-align:center;margin-bottom:1rem;">
-        <button onclick="forgotPassword()" style="background:none;border:none;color:#8faf9a;font-family:'PT Serif',serif;font-size:.78rem;cursor:pointer;font-style:italic;text-decoration:underline;">Forgot password?</button>
-      </div>
-
-      <!-- Divider -->
-      <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;">
-        <div style="flex:1;height:1px;background:#d8d2c8;"></div>
-        <span style="font-size:.72rem;color:#8faf9a;font-style:italic;">or</span>
-        <div style="flex:1;height:1px;background:#d8d2c8;"></div>
-      </div>
-
-      <!-- Google -->
-      <button onclick="signIn()" style="width:100%;background:#fefdfe;color:#335a3a;border:1px solid #d8d2c8;border-radius:7px;padding:.8rem;font-family:'PT Serif',serif;font-size:.88rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.7rem;transition:background .2s;margin-bottom:1.25rem;" onmouseover="this.style.background='#f0ede8'" onmouseout="this.style.background='#fefdfe'">
-        <svg width="17" height="17" viewBox="0 0 18 18" fill="none">
-          <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908C16.658 14.121 17.64 11.834 17.64 9.2z" fill="#4285F4"/>
-          <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z" fill="#34A853"/>
-          <path d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957C.347 6.175 0 7.55 0 9s.348 2.825.957 4.039l3.007-2.332z" fill="#FBBC05"/>
-          <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z" fill="#EA4335"/>
-        </svg>
-        Continue with Google
-      </button>
-
-      <p style="text-align:center;font-size:.7rem;color:#8faf9a;font-style:italic;line-height:1.6;">Your plans are saved securely to your account.</p>
+      <button class="btn-nav secondary" onclick="doSignOut()">Sign Out</button>
     </div>
   </div>
-</div>
+</nav>
 
-<div id="app-content" style="display:none;">
-<div class="hero">
-  <div class="hero-badge">AI-Powered Floor Plans</div>
-  <h1>Design your space <em>the way you actually live</em></h1>
-  <p>Describe your home, your family, your life — and get a real, code-compliant floor plan in minutes. No architecture degree required.</p>
-</div>
+<!-- HERO -->
+<section class="hero">
+  <h1>Generate a <span>Professional Blueprint</span><br>in Seconds</h1>
+  <p>Describe your space, upload a photo or existing blueprint, and get a detailed 2D floor plan with door arcs, window symbols, and code compliance checks.</p>
+  <div class="badge-row">
+    <span class="badge">⚡ AI-Powered</span>
+    <span class="badge">📐 Professional SVG</span>
+    <span class="badge">🚪 Door &amp; Window Symbols</span>
+    <span class="badge">📄 PDF Export</span>
+    <span class="badge">✅ Code-Compliant</span>
+  </div>
+</section>
 
-<div class="app-shell">
-  <!-- Step Progress -->
-  <div class="steps-bar" id="steps-bar">
-    <div class="step-item">
-      <div class="step-dot active" id="dot-1">1</div>
-      <div class="step-label active" id="lbl-1">Location</div>
-    </div>
-    <div class="step-line" id="line-1"></div>
-    <div class="step-item">
-      <div class="step-dot" id="dot-2">2</div>
-      <div class="step-label" id="lbl-2">Project Type</div>
-    </div>
-    <div class="step-line" id="line-2"></div>
-    <div class="step-item">
-      <div class="step-dot" id="dot-3">3</div>
-      <div class="step-label" id="lbl-3">Describe It</div>
-    </div>
-    <div class="step-line" id="line-3"></div>
-    <div class="step-item">
-      <div class="step-dot" id="dot-4">4</div>
-      <div class="step-label" id="lbl-4">Generate</div>
-    </div>
+<!-- WIZARD -->
+<div class="wizard-wrap">
+
+  <div class="progress-bar" id="progress-bar">
+    <div class="progress-step active" data-step="0">Upload</div>
+    <div class="progress-step"        data-step="1">Location</div>
+    <div class="progress-step"        data-step="2">Type</div>
+    <div class="progress-step"        data-step="3">Describe</div>
+    <div class="progress-step"        data-step="4">Generate</div>
   </div>
 
-  <!-- UPLOAD EXISTING BLUEPRINT -->
-  <div class="card" id="upload-section" style="border-style:dashed;">
-    <div class="card-title">📂 Start from an existing blueprint <span style="font-size:.75rem;font-weight:400;font-style:italic;color:var(--sage);margin-left:.4rem;">Optional</span></div>
-    <div class="card-subtitle">Upload a floor plan image — JPG, PNG, or screenshot. AI will read it and let you describe your desired changes.</div>
-    <div id="bp-upload-area"
-      style="border:2px dashed var(--border);border-radius:8px;padding:2rem 1.5rem;text-align:center;cursor:pointer;transition:border-color .2s;margin-bottom:1rem;"
-      onclick="document.getElementById('bp-file-input').click()"
-      ondragover="event.preventDefault();document.getElementById('bp-upload-area').style.borderColor='var(--sage)'"
-      ondragleave="document.getElementById('bp-upload-area').style.borderColor='var(--border)'"
-      ondrop="handleBpDrop(event)">
-      <div style="font-size:2rem;margin-bottom:.5rem;line-height:1;">🗺️</div>
-      <div style="font-family:'Cormorant',serif;font-size:1.05rem;color:var(--ink);margin-bottom:.25rem;">Drop a blueprint or floor plan image here</div>
-      <div style="font-family:'PT Serif',serif;font-size:.78rem;color:var(--sage);font-style:italic;">or click to browse</div>
-    </div>
-    <input type="file" id="bp-file-input" accept="image/*" style="display:none" onchange="handleBpFile(event)"/>
+  <!-- Step 0: Photo / Blueprint Upload -->
+  <div class="step-card active" id="step-0">
+    <h2>Have an image to reference?</h2>
+    <p class="sub">Optional — upload a photo of your space or an existing blueprint and AI will pre-fill your description.</p>
 
-    <div id="bp-preview" style="display:none;margin-bottom:1rem;">
-      <img id="bp-thumb" style="max-height:180px;border-radius:6px;border:1px solid var(--border);display:block;margin-bottom:.75rem;"/>
-      <div id="bp-analyzing" style="display:none;font-family:'PT Serif',serif;font-size:.85rem;color:var(--sage);font-style:italic;">Analyzing your blueprint…</div>
-      <div id="bp-detected" style="display:none;background:rgba(102,140,102,0.08);border:1px solid rgba(102,140,102,0.2);border-radius:6px;padding:.85rem;font-family:'PT Serif',serif;font-size:.82rem;line-height:1.6;color:var(--ink);"></div>
+    <div class="upload-mode-toggle">
+      <button class="mode-btn active" id="mode-photo" onclick="setUploadMode('photo')">📷 Photo of space</button>
+      <button class="mode-btn" id="mode-blueprint" onclick="setUploadMode('blueprint')">📐 Existing Blueprint</button>
     </div>
 
-    <div id="modifications-area" style="display:none;">
-      <div class="field-group" style="margin-bottom:.75rem;">
-        <label>Describe the changes you want made</label>
-        <textarea id="modifications-input" placeholder="e.g. Move the master bedroom to the south side, make the kitchen 3 feet wider, add a mudroom off the garage, add a walk-in closet to bedroom 2, open up the living and dining area…" style="min-height:90px;"></textarea>
-      </div>
-      <div style="display:flex;align-items:center;gap:.75rem;">
-        <button onclick="clearBpUpload()" style="padding:.4rem .9rem;border-radius:5px;font-family:'PT Serif',serif;font-size:.78rem;border:1px solid var(--border);background:transparent;color:var(--sage);cursor:pointer;">✕ Clear Upload</button>
-        <span style="font-family:'PT Serif',serif;font-size:.78rem;color:var(--sage);font-style:italic;">The AI will use your uploaded plan as the starting point.</span>
+    <div class="photo-drop" id="photo-drop" onclick="document.getElementById('photo-input').click()"
+         ondragover="event.preventDefault(); this.classList.add('dragover')"
+         ondragleave="this.classList.remove('dragover')"
+         ondrop="handlePhotoDrop(event)">
+      <span class="drop-icon" id="drop-icon">📷</span>
+      <p id="drop-text">Drag &amp; drop a photo here, or <strong>click to browse</strong></p>
+      <p style="margin-top:.3rem;font-size:.78rem;">JPEG, PNG, WEBP — max 10 MB</p>
+    </div>
+    <input type="file" id="photo-input" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="handlePhotoSelect(event)" />
+
+    <div class="photo-preview" id="photo-preview">
+      <img id="photo-thumb" src="" alt="Selected image" />
+      <button class="remove-photo" onclick="clearPhoto()" title="Remove">✕</button>
+    </div>
+
+    <div class="ai-badge" id="ai-badge"></div>
+
+    <div class="step-nav">
+      <div></div>
+      <div style="display:flex;gap:.6rem;">
+        <button class="btn btn-ghost" id="analyze-btn" onclick="analyzePhoto()" style="display:none">
+          <span class="spinner" id="analyze-spinner" style="display:none"></span>
+          Analyze
+        </button>
+        <button class="btn btn-ghost" onclick="goToStep(1)">Skip →</button>
+        <button class="btn btn-primary" id="photo-next-btn" onclick="goToStep(1)" style="display:none">Next →</button>
       </div>
     </div>
   </div>
 
-  <!-- STEP 1: Location -->
-  <div class="card" id="step1">
-    <div class="card-title">Where is your project located?</div>
-    <div class="card-subtitle">We use this to apply the correct state & local building codes automatically.</div>
-    <div class="location-row">
-      <div class="field-group">
-        <label>State</label>
-        <select id="state-select" onchange="onStateChange()">
-          <option value="">Select your state...</option>
-          <option>Alabama</option><option>Alaska</option><option>Arizona</option><option>Arkansas</option>
-          <option>California</option><option>Colorado</option><option>Connecticut</option><option>Delaware</option>
-          <option>Florida</option><option>Georgia</option><option>Hawaii</option><option>Idaho</option>
-          <option>Illinois</option><option>Indiana</option><option>Iowa</option><option>Kansas</option>
-          <option>Kentucky</option><option>Louisiana</option><option>Maine</option><option>Maryland</option>
-          <option>Massachusetts</option><option>Michigan</option><option>Minnesota</option><option>Mississippi</option>
-          <option>Missouri</option><option>Montana</option><option>Nebraska</option><option>Nevada</option>
-          <option>New Hampshire</option><option>New Jersey</option><option>New Mexico</option><option>New York</option>
-          <option>North Carolina</option><option>North Dakota</option><option>Ohio</option><option>Oklahoma</option>
-          <option>Oregon</option><option>Pennsylvania</option><option>Rhode Island</option><option>South Carolina</option>
-          <option>South Dakota</option><option>Tennessee</option><option>Texas</option><option>Utah</option>
-          <option>Vermont</option><option>Virginia</option><option>Washington</option><option>West Virginia</option>
-          <option>Wisconsin</option><option>Wyoming</option>
-        </select>
+  <!-- Step 1: Location -->
+  <div class="step-card" id="step-1">
+    <h2>Where is this project?</h2>
+    <p class="sub">Location helps ensure local building code compliance.</p>
+    <div class="row-2">
+      <div class="field">
+        <label>City</label>
+        <input type="text" id="city" placeholder="e.g. Lexington" />
       </div>
-      <div class="field-group">
-        <label>City / Municipality</label>
-        <input type="text" id="city-input" placeholder="e.g. Louisville" oninput="onCityInput()"/>
+      <div class="field">
+        <label>State / Province</label>
+        <input type="text" id="state" placeholder="e.g. Kentucky" />
       </div>
     </div>
-    <div id="code-box" class="code-info hidden">
-      <div class="code-info-text">
-        <h4 id="code-title">Building Codes Loaded</h4>
-        <p id="code-desc">Your floor plan will automatically comply with local requirements.</p>
-      </div>
+    <div class="field">
+      <label>Country</label>
+      <select id="country">
+        <option>United States</option>
+        <option>Canada</option>
+        <option>United Kingdom</option>
+        <option>Australia</option>
+        <option>Other</option>
+      </select>
+    </div>
+    <div class="step-nav">
+      <button class="btn btn-ghost" onclick="goToStep(0)">← Back</button>
+      <button class="btn btn-primary" onclick="goToStep(2)">Next →</button>
     </div>
   </div>
 
-  <!-- STEP 2: Project Type -->
-  <div class="card" id="step2">
-    <div class="card-title">What are you designing?</div>
-    <div class="card-subtitle">Select your project type to get started.</div>
-    <div class="type-grid">
-      <div class="type-card" onclick="selectType(this, 'new-home')">
-        <div class="name">New Home</div>
-        <div class="desc">Full custom floor plan from scratch</div>
-      </div>
-      <div class="type-card" onclick="selectType(this, 'addition')">
-        <div class="name">Addition</div>
-        <div class="desc">Expand an existing structure</div>
-      </div>
-      <div class="type-card" onclick="selectType(this, 'renovation')">
-        <div class="name">Renovation</div>
-        <div class="desc">Redesign existing interior space</div>
-      </div>
-      <div class="type-card" onclick="selectType(this, 'adu')">
-        <div class="name">ADU / Garage Apt</div>
-        <div class="desc">Accessory dwelling unit</div>
-      </div>
-      <div class="type-card" onclick="selectType(this, 'commercial')">
-        <div class="name">Small Commercial</div>
-        <div class="desc">Office, shop, or studio space</div>
-      </div>
-      <div class="type-card" onclick="selectType(this, 'barn')">
-        <div class="name">Barn / Farm Building</div>
-        <div class="desc">Agricultural & outbuildings</div>
-      </div>
+  <!-- Step 2: Space Type -->
+  <div class="step-card" id="step-2">
+    <h2>What type of space?</h2>
+    <p class="sub">Select the primary use of the floor plan.</p>
+    <div class="option-grid" id="type-grid">
+      <div class="option-btn" onclick="selectType(this,'Single-Family Home')"><span class="icon">🏠</span>Single Family</div>
+      <div class="option-btn" onclick="selectType(this,'Apartment / Condo')"><span class="icon">🏢</span>Apartment</div>
+      <div class="option-btn" onclick="selectType(this,'Office')"><span class="icon">💼</span>Office</div>
+      <div class="option-btn" onclick="selectType(this,'Retail')"><span class="icon">🛍️</span>Retail</div>
+      <div class="option-btn" onclick="selectType(this,'Restaurant / Cafe')"><span class="icon">☕</span>Restaurant</div>
+      <div class="option-btn" onclick="selectType(this,'Garage / Workshop')"><span class="icon">🔧</span>Garage</div>
+      <div class="option-btn" onclick="selectType(this,'Studio / ADU')"><span class="icon">🏡</span>Studio / ADU</div>
+      <div class="option-btn" onclick="selectType(this,'Tiny Home')"><span class="icon">🌿</span>Tiny Home</div>
+    </div>
+    <div class="step-nav">
+      <button class="btn btn-ghost" onclick="goToStep(1)">← Back</button>
+      <button class="btn btn-primary" onclick="goToStep(3)">Next →</button>
     </div>
   </div>
 
-  <!-- STEP 3: Describe -->
-  <div class="card" id="step3">
-    <div class="card-title">Describe how your home needs to work for you</div>
-    <div class="card-subtitle">Don't worry about technical language — just talk like you would to a friend.</div>
-    <div style="margin-bottom:0.75rem;">
-      <div style="font-size:0.72rem; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--sage); margin-bottom:0.5rem; font-family:'PT Serif',serif;">Quick prompts to get you started:</div>
-      <div class="prompt-chips">
-        <span class="chip" onclick="addChip('We have 3 kids who need their own rooms')">Family with kids</span>
-        <span class="chip" onclick="addChip('I work from home and need a quiet home office')">Home office</span>
-        <span class="chip" onclick="addChip('We love to entertain — open kitchen and living')">Open entertaining</span>
-        <span class="chip" onclick="addChip('We need an in-law suite on the main floor')">In-law suite</span>
-        <span class="chip" onclick="addChip('I want a large mudroom and workshop garage')">Workshop/garage</span>
-        <span class="chip" onclick="addChip('Accessible design for wheelchair user')">Accessibility</span>
-        <span class="chip" onclick="addChip('Single story ranch, no stairs')">Single story</span>
-        <span class="chip" onclick="addChip('Lots of natural light, big windows')">Light & windows</span>
+  <!-- Step 3: Description -->
+  <div class="step-card" id="step-3">
+    <h2>Describe your space</h2>
+    <p class="sub">Include rooms, sizes, features, style preferences, and any special requirements.</p>
+    <div class="row-3">
+      <div class="field">
+        <label>Total Sq Ft</label>
+        <input type="number" id="sqft" placeholder="e.g. 1800" min="100" max="20000" />
+      </div>
+      <div class="field">
+        <label>Bedrooms</label>
+        <input type="number" id="beds" placeholder="e.g. 3" min="0" max="20" />
+      </div>
+      <div class="field">
+        <label>Bathrooms</label>
+        <input type="number" id="baths" placeholder="e.g. 2" min="0" max="20" step="0.5" />
       </div>
     </div>
-    <div class="field-group" style="margin-bottom:1rem;">
-      <label>Your Description</label>
-      <textarea id="description" placeholder="Example: We're a family of 4 with two young kids. We need 3 bedrooms, 2 bathrooms, an open kitchen that connects to the living room so we can watch the kids while cooking. We'd love a mudroom coming in from the garage, a laundry room on the main floor, and a small home office. We like single-story homes and want the master bedroom away from the kids' rooms for privacy..."></textarea>
-    </div>
-    <div class="location-row">
-      <div class="field-group">
-        <label>Approximate Square Footage</label>
-        <select id="sqft">
-          <option value="">Not sure / let AI decide</option>
-          <option value="under-1000">Under 1,000 sq ft</option>
-          <option value="1000-1500">1,000 – 1,500 sq ft</option>
-          <option value="1500-2000">1,500 – 2,000 sq ft</option>
-          <option value="2000-2500">2,000 – 2,500 sq ft</option>
-          <option value="2500-3000">2,500 – 3,000 sq ft</option>
-          <option value="3000-4000">3,000 – 4,000 sq ft</option>
-          <option value="over-4000">Over 4,000 sq ft</option>
-        </select>
-      </div>
-      <div class="field-group">
-        <label>Stories</label>
+    <div class="row-2">
+      <div class="field">
+        <label>Number of Stories</label>
         <select id="stories">
-          <option value="1">Single Story</option>
-          <option value="2">Two Story</option>
-          <option value="1.5">One and a Half Story</option>
-          <option value="split">Split Level</option>
+          <option value="1">1 Story</option>
+          <option value="2">2 Stories</option>
+          <option value="3">3 Stories</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Style Preference</label>
+        <select id="style">
+          <option>Open Concept</option>
+          <option>Traditional / Defined Rooms</option>
+          <option>Modern Minimalist</option>
+          <option>Farmhouse</option>
+          <option>Contemporary</option>
+          <option>Industrial</option>
         </select>
       </div>
     </div>
+    <div class="field">
+      <label>Space Description <span style="font-weight:400;color:var(--text-muted)">(the more detail, the better)</span></label>
+      <div class="chips" id="prompt-chips">
+        <span class="chip" onclick="addChip('open concept kitchen/living area')">Open concept kitchen/living</span>
+        <span class="chip" onclick="addChip('master suite on main floor')">Master on main</span>
+        <span class="chip" onclick="addChip('dedicated home office')">Home office</span>
+        <span class="chip" onclick="addChip('3-car attached garage')">3-car garage</span>
+        <span class="chip" onclick="addChip('covered back porch')">Covered back porch</span>
+        <span class="chip" onclick="addChip('mudroom entry off garage')">Mudroom entry</span>
+        <span class="chip" onclick="addChip('walk-in closets in all bedrooms')">Walk-in closets</span>
+        <span class="chip" onclick="addChip('ADA accessible wide doorways and no-step entry')">ADA accessible</span>
+      </div>
+      <textarea id="description" placeholder="e.g. I need a 3-bedroom, 2-bath home with an open kitchen/living area, a dedicated home office, a mudroom off the garage entrance, and a covered back porch…"></textarea>
+    </div>
+    <div class="field">
+      <label>Special Requirements</label>
+      <input type="text" id="special" placeholder="e.g. ADA accessible, wide doorways, no-step entry" />
+    </div>
+    <div class="step-nav">
+      <button class="btn btn-ghost" onclick="goToStep(2)">← Back</button>
+      <button class="btn btn-primary" onclick="goToStep(4)">Next →</button>
+    </div>
   </div>
 
-  <!-- GENERATE BUTTON -->
-  <button class="btn-generate" id="gen-btn" onclick="startGeneration()">
-    Generate My Floor Plan
-  </button>
-
-  <!-- GENERATING STATE -->
-  <div class="generating-overlay" id="gen-overlay">
-    <div class="blueprint-spinner">
-      <div class="spinner-ring"></div>
-      <div class="spinner-ring"></div>
-      <div class="spinner-ring"></div>
-    </div>
-    <div>
-      <div style="font-family:'Cormorant',serif; font-size:1.3rem; font-weight:400; color:var(--ink); margin-bottom:1rem; text-align:center; letter-spacing:0.02em;">Designing your space...</div>
-      <div class="gen-steps">
-        <div class="gen-step" id="gs1"><div class="gen-step-dot"></div>Analyzing your description with AI</div>
-        <div class="gen-step" id="gs2"><div class="gen-step-dot"></div>Loading local building codes</div>
-        <div class="gen-step" id="gs3"><div class="gen-step-dot"></div>Calculating room dimensions & flow</div>
-        <div class="gen-step" id="gs4"><div class="gen-step-dot"></div>Checking code compliance</div>
-        <div class="gen-step" id="gs5"><div class="gen-step-dot"></div>Rendering blueprint</div>
-      </div>
+  <!-- Step 4: Generate -->
+  <div class="step-card" id="step-4">
+    <h2>Ready to generate</h2>
+    <p class="sub">Review your inputs and click Generate to create your AI floor plan.</p>
+    <div id="summary-preview" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.25rem;font-size:.875rem;line-height:1.8;color:var(--text-muted);margin-bottom:1.5rem;"></div>
+    <div class="step-nav">
+      <button class="btn btn-ghost" onclick="goToStep(3)">← Back</button>
+      <button class="btn btn-primary" id="generate-btn" onclick="generatePlan()">
+        ✨ Generate Floor Plan
+      </button>
     </div>
   </div>
 
-  <!-- RESULT SECTION -->
-  <div id="result-section">
-    <div class="result-header">
-      <div>
-        <div class="result-title" id="result-title">Your Floor Plan</div>
-        <div style="font-size:0.8rem; color:var(--sage); margin-top:0.2rem; font-family:'PT Serif',serif; font-style:italic;" id="result-meta"></div>
-      </div>
-      <div class="export-bar">
-        <button class="btn-export btn-save" id="save-btn" onclick="savePlan()">💾 Save Plan</button>
-        <button class="btn-export btn-pdf" onclick="exportNotice('PDF')">Export PDF</button>
-        <button class="btn-export btn-dxf" onclick="exportNotice('DXF')">Export DXF</button>
-        <button class="btn-export btn-autocad" onclick="exportNotice('AutoCAD')">Open in AutoCAD</button>
-        <button class="btn-export btn-archsynth" onclick="exportNotice('Archsynth')">Render in Archsynth</button>
-      </div>
-    </div>
-    <!-- Blueprint Canvas SVG -->
-    <div class="blueprint-canvas">
-      <svg class="bp-svg" id="bp-svg" viewBox="0 0 750 480" xmlns="http://www.w3.org/2000/svg"></svg>
-    </div>
-    <!-- AI Summary -->
-    <div class="card">
-      <div class="card-title">AI Design Summary</div>
-      <div class="ai-summary" id="ai-summary-text">Loading...</div>
-    </div>
-    <!-- Room Breakdown -->
-    <div class="card">
-      <div class="card-title">Room Breakdown</div>
-      <div class="card-subtitle">All rooms sized to your description and local code minimums.</div>
-      <table class="room-table" id="room-table">
-        <thead>
-          <tr>
-            <th>Room</th>
-            <th>Dimensions</th>
-            <th>Sq Ft</th>
-            <th>Notes</th>
-          </tr>
-        </thead>
-        <tbody id="room-tbody"></tbody>
-      </table>
-    </div>
-    <!-- Code Compliance -->
-    <div class="card">
-      <div class="card-title">Code Compliance</div>
-      <div class="card-subtitle" id="compliance-subtitle">Checked against local requirements.</div>
-      <div class="compliance-grid" id="compliance-grid"></div>
-    </div>
-    <!-- Integrations -->
-    <div class="card">
-      <div class="card-title">Send to Professional Tools</div>
-      <div class="card-subtitle">Your floor plan is ready to move into industry-standard tools.</div>
-      <div class="integration-row">
-        <div class="integration-card">
-          <h5>AutoCAD</h5>
-          <p>Open your DXF file directly in AutoCAD for professional drafting</p>
-          <button class="btn-connect" onclick="exportNotice('AutoCAD')">Send to AutoCAD</button>
-        </div>
-        <div class="integration-card">
-          <h5>Archsynth</h5>
-          <p>Transform your blueprint into photorealistic renders</p>
-          <button class="btn-connect" onclick="exportNotice('Archsynth')">Open in Archsynth</button>
-        </div>
-        <div class="integration-card">
-          <h5>Revit / SketchUp</h5>
-          <p>Import your floor plan into Revit or SketchUp for 3D modeling</p>
-          <button class="btn-connect" onclick="exportNotice('Revit')">Export Compatible File</button>
-        </div>
-      </div>
-    </div>
-    <!-- Start Over -->
-    <div style="text-align:center; margin-top:2rem;">
-      <button class="btn-generate" style="max-width:300px; margin:0 auto;" onclick="startOver()">Start a New Design</button>
-    </div>
-  </div><!-- /result-section -->
-</div><!-- /app-shell -->
-</div><!-- /app-content -->
+</div><!-- /wizard-wrap -->
 
-<!-- PLAN NAMING MODAL -->
-<div id="name-modal" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(51,90,58,0.45);align-items:center;justify-content:center;">
-  <div style="background:#f7f5f1;border:1px solid #d8d2c8;border-radius:12px;padding:2rem 2.25rem;max-width:400px;width:90%;box-shadow:0 8px 30px rgba(51,90,58,0.2);">
-    <div style="font-family:'Cormorant',serif;font-size:1.4rem;font-weight:500;color:#335a3a;margin-bottom:.3rem;">Name Your Plan</div>
-    <div style="font-family:'PT Serif',serif;font-size:.8rem;color:#668c66;font-style:italic;margin-bottom:1.2rem;">Give this floor plan a name so you can find it easily in My Plans.</div>
-    <input id="plan-name-input" type="text" placeholder="e.g. Ranch House — Option A"
-      style="width:100%;background:#fefdfe;border:1px solid #d8d2c8;border-radius:5px;padding:.7rem .9rem;font-family:'Cormorant',serif;font-size:1.05rem;color:#335a3a;outline:none;margin-bottom:1.25rem;"
-      onfocus="this.style.borderColor='#668c66'" onblur="this.style.borderColor='#d8d2c8'"
-      onkeydown="if(event.key==='Enter')confirmSavePlan()"/>
-    <div style="display:flex;gap:.75rem;justify-content:flex-end;">
-      <button onclick="document.getElementById('name-modal').style.display='none'" style="padding:.55rem 1.15rem;border-radius:5px;font-family:'PT Serif',serif;font-size:.85rem;border:1px solid #d8d2c8;background:transparent;color:#668c66;cursor:pointer;">Cancel</button>
-      <button onclick="confirmSavePlan()" style="padding:.55rem 1.4rem;border-radius:5px;font-family:'Cormorant',serif;font-size:1rem;font-weight:500;border:none;background:#335a3a;color:#fefdfe;cursor:pointer;">Save Plan</button>
+<!-- GENERATE LOADING -->
+<div id="generate-loading">
+  <div class="loading-icon">📐</div>
+  <h3>Generating your floor plan…</h3>
+  <p class="sub">This usually takes 15–25 seconds</p>
+  <ul class="loading-steps" id="loading-steps">
+    <li class="lstep" id="lstep-0"><span class="lstep-icon">○</span> Parsing your requirements…</li>
+    <li class="lstep" id="lstep-1"><span class="lstep-icon">○</span> Designing room layout and flow…</li>
+    <li class="lstep" id="lstep-2"><span class="lstep-icon">○</span> Calculating precise dimensions…</li>
+    <li class="lstep" id="lstep-3"><span class="lstep-icon">○</span> Checking local building codes…</li>
+    <li class="lstep" id="lstep-4"><span class="lstep-icon">○</span> Rendering professional blueprint…</li>
+  </ul>
+</div>
+
+<!-- RESULT SECTION -->
+<div id="result-section">
+  <div class="result-header">
+    <h2 id="result-title">Your Floor Plan</h2>
+    <div class="export-bar">
+      <button class="btn-export save" id="auth-save-btn" onclick="savePlan()">💾 Save</button>
+      <button class="btn-export" onclick="exportSVG()">📥 SVG</button>
+      <button class="btn-export" onclick="exportPDF()">📄 PDF</button>
+      <button class="btn-export" onclick="exportDXF()">🔧 DXF</button>
+      <button class="btn-export" onclick="exportArchsynth()">🏗 Archsynth</button>
+      <button class="btn-export" onclick="startOver()">🔄 New Plan</button>
     </div>
+  </div>
+
+  <div id="floor-tabs"></div>
+
+  <div class="result-grid">
+    <div class="svg-wrap">
+      <svg id="floor-plan-svg" viewBox="0 0 580 480" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+    <div class="details-panel">
+      <div class="panel-card">
+        <h3>Rooms &amp; Areas</h3>
+        <ul class="room-list" id="room-list"></ul>
+      </div>
+      <div class="panel-card">
+        <h3>Code Compliance</h3>
+        <ul class="compliance-list" id="compliance-list"></ul>
+      </div>
+      <div class="panel-card">
+        <h3>Design Notes</h3>
+        <p class="summary-text" id="summary-text"></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- REFINEMENT SECTION -->
+<div id="refine-section">
+  <div class="panel-card">
+    <h3>Refine This Plan</h3>
+    <p class="sub">Describe changes you'd like — Claude will update the layout and re-render.</p>
+    <textarea id="refine-input" placeholder="e.g. Make the master bedroom 18×16, add a mudroom entry, move the garage to the east side, make the kitchen bigger…"></textarea>
+    <button class="btn btn-primary" id="refine-btn" onclick="refinePlan()">
+      <span class="spinner" id="refine-spinner" style="display:none"></span>
+      ✏️ Refine Plan
+    </button>
   </div>
 </div>
 
@@ -1186,1127 +665,976 @@
   </div>
 </aside>
 
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
 <script>
-  let selectedType  = null;
-  let currentPlan   = null;
-  let _authTab      = 'signin';
-  let uploadedBpData = null;
+// ── State ──────────────────────────────────────────────────────────────────
+const state = {
+  step: 0,
+  location: { city: '', state: '', country: 'United States' },
+  spaceType: '',
+  sqft: '',
+  beds: '',
+  baths: '',
+  stories: '1',
+  style: 'Open Concept',
+  description: '',
+  special: '',
+  photo: null,
+  aiPhotoData: null,
+  generatedPlan: null,
+  currentFloor: 0,
+  uploadMode: 'photo',
+};
 
-  // ── Auth ──────────────────────────────────────────────────────────────────
-  function updateAuthUI(user) {
-    const out       = document.getElementById('auth-signed-out');
-    const inn       = document.getElementById('auth-signed-in');
-    const saveBtn   = document.getElementById('save-btn');
-    const loginScr  = document.getElementById('login-screen');
-    const appCont   = document.getElementById('app-content');
-    if (user) {
-      loginScr.style.display = 'none';
-      appCont.style.display  = 'block';
-      out.style.display = 'none';
-      inn.style.display = 'flex';
-      document.getElementById('user-avatar').textContent = (user.displayName || user.email || '?')[0].toUpperCase();
-      document.getElementById('user-name').textContent   = user.displayName || user.email;
-      if (saveBtn && currentPlan) saveBtn.classList.add('visible');
-    } else {
-      loginScr.style.display = 'flex';
-      appCont.style.display  = 'none';
-      out.style.display = 'flex';
-      inn.style.display = 'none';
-      if (saveBtn) saveBtn.classList.remove('visible');
-    }
+// ── Auth ───────────────────────────────────────────────────────────────────
+function updateAuthUI(user) {
+  const out     = document.getElementById('auth-signed-out');
+  const inn     = document.getElementById('auth-signed-in');
+  const saveBtn = document.getElementById('auth-save-btn');
+  if (user) {
+    out.style.display = 'none';
+    inn.style.display = 'flex';
+    document.getElementById('user-avatar').textContent = (user.displayName || user.email || '?')[0].toUpperCase();
+    document.getElementById('user-name').textContent   = user.displayName || user.email;
+    if (saveBtn && state.generatedPlan) saveBtn.classList.add('visible');
+  } else {
+    out.style.display = 'flex';
+    inn.style.display = 'none';
+    if (saveBtn) saveBtn.classList.remove('visible');
   }
+}
 
-  async function signIn() {
-    if (!window._fb) return;
-    try { await window._fb.signInWithPopup(window._fb.auth, window._fb.provider); }
-    catch(e) { showExportToast('Sign-in failed: ' + e.message); }
-  }
+async function signIn() {
+  if (!window._fb) return showToast('Firebase not configured yet.', 'error');
+  try {
+    await window._fb.signInWithPopup(window._fb.auth, window._fb.provider);
+  } catch (e) { showToast('Sign-in failed: ' + e.message, 'error'); }
+}
 
-  async function doSignOut() {
-    if (!window._fb) return;
-    await window._fb.signOut(window._fb.auth);
-  }
+async function doSignOut() {
+  if (!window._fb) return;
+  await window._fb.signOut(window._fb.auth);
+  showToast('Signed out.');
+}
 
-  function switchTab(tab) {
-    _authTab = tab;
-    const isSignIn = tab === 'signin';
-    const tsi = document.getElementById('tab-signin');
-    const tsu = document.getElementById('tab-signup');
-    tsi.style.background = isSignIn ? '#335a3a' : 'transparent';
-    tsi.style.color      = isSignIn ? '#fefdfe' : '#668c66';
-    tsi.style.fontWeight = isSignIn ? '700' : '400';
-    tsu.style.background = isSignIn ? 'transparent' : '#335a3a';
-    tsu.style.color      = isSignIn ? '#668c66' : '#fefdfe';
-    tsu.style.fontWeight = isSignIn ? '400' : '700';
-    document.getElementById('auth-submit-btn').textContent = isSignIn ? 'Sign In' : 'Create Account';
-    document.getElementById('forgot-wrap').style.display   = isSignIn ? 'block' : 'none';
-    document.getElementById('auth-error').style.display    = 'none';
-  }
+// ── Progress ───────────────────────────────────────────────────────────────
+function goToStep(n) {
+  collectCurrentStep(state.step);
+  state.step = n;
+  renderProgress(n);
+  document.querySelectorAll('.step-card').forEach(c => c.classList.remove('active'));
+  document.getElementById('step-' + n).classList.add('active');
+  if (n === 4) buildSummaryPreview();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
 
-  function showAuthError(msg) {
-    const el = document.getElementById('auth-error');
-    el.textContent = msg;
-    el.style.display = msg ? 'block' : 'none';
-  }
+function renderProgress(active) {
+  document.querySelectorAll('.progress-step').forEach(el => {
+    const s = parseInt(el.dataset.step);
+    el.classList.remove('active', 'complete');
+    if (s === active) el.classList.add('active');
+    if (s < active)   el.classList.add('complete');
+  });
+}
 
-  async function submitAuth() {
-    if (!window._fb) return;
-    const email    = document.getElementById('auth-email').value.trim();
-    const password = document.getElementById('auth-password').value;
-    if (!email || !password) { showAuthError('Please enter your email and password.'); return; }
-    showAuthError('');
-    const btn = document.getElementById('auth-submit-btn');
-    btn.disabled = true;
-    btn.textContent = _authTab === 'signin' ? 'Signing in…' : 'Creating account…';
-    try {
-      if (_authTab === 'signup') {
-        await window._fb.createUserWithEmailAndPassword(window._fb.auth, email, password);
-      } else {
-        await window._fb.signInWithEmailAndPassword(window._fb.auth, email, password);
-      }
-    } catch(e) {
-      const msg =
-        e.code === 'auth/user-not-found'       ? 'No account found with that email.' :
-        e.code === 'auth/wrong-password'        ? 'Incorrect password.' :
-        e.code === 'auth/invalid-credential'    ? 'Incorrect email or password.' :
-        e.code === 'auth/email-already-in-use'  ? 'That email is already registered — sign in instead.' :
-        e.code === 'auth/weak-password'         ? 'Password must be at least 6 characters.' :
-        e.code === 'auth/invalid-email'         ? 'Please enter a valid email address.' :
-        e.message;
-      showAuthError(msg);
-      btn.disabled = false;
-      btn.textContent = _authTab === 'signin' ? 'Sign In' : 'Create Account';
-    }
+function collectCurrentStep(n) {
+  if (n === 1) {
+    state.location.city    = document.getElementById('city').value.trim();
+    state.location.state   = document.getElementById('state').value.trim();
+    state.location.country = document.getElementById('country').value;
   }
+  if (n === 3) {
+    state.sqft        = document.getElementById('sqft').value;
+    state.beds        = document.getElementById('beds').value;
+    state.baths       = document.getElementById('baths').value;
+    state.stories     = document.getElementById('stories').value;
+    state.style       = document.getElementById('style').value;
+    state.description = document.getElementById('description').value.trim();
+    state.special     = document.getElementById('special').value.trim();
+  }
+}
 
-  async function forgotPassword() {
-    if (!window._fb) return;
-    const email = document.getElementById('auth-email').value.trim();
-    if (!email) { showAuthError('Enter your email address above, then click Forgot password.'); return; }
-    try {
-      await window._fb.sendPasswordResetEmail(window._fb.auth, email);
-      showAuthError('');
-      showExportToast('Password reset email sent — check your inbox.');
-    } catch(e) {
-      showAuthError('Could not send reset email: ' + e.message);
-    }
+// ── Upload Mode ────────────────────────────────────────────────────────────
+function setUploadMode(mode) {
+  state.uploadMode = mode;
+  document.getElementById('mode-photo').classList.toggle('active', mode === 'photo');
+  document.getElementById('mode-blueprint').classList.toggle('active', mode === 'blueprint');
+  if (mode === 'blueprint') {
+    document.getElementById('drop-icon').textContent = '📐';
+    document.getElementById('drop-text').innerHTML = 'Drag &amp; drop a blueprint image, or <strong>click to browse</strong>';
+  } else {
+    document.getElementById('drop-icon').textContent = '📷';
+    document.getElementById('drop-text').innerHTML = 'Drag &amp; drop a photo here, or <strong>click to browse</strong>';
   }
+}
 
-  // ── Save Plan (with naming modal) ─────────────────────────────────────────
-  function savePlan() {
-    if (!window._currentUser || !currentPlan) return;
-    const input = document.getElementById('plan-name-input');
-    input.value = currentPlan.title || 'My Floor Plan';
-    const modal = document.getElementById('name-modal');
-    modal.style.display = 'flex';
-    setTimeout(() => { input.select(); input.focus(); }, 80);
-  }
+// ── Photo ──────────────────────────────────────────────────────────────────
+function handlePhotoSelect(evt) {
+  const file = evt.target.files[0];
+  if (file) loadPhotoFile(file);
+}
 
-  async function confirmSavePlan() {
-    if (!window._currentUser || !window._fb || !currentPlan) return;
-    const name = document.getElementById('plan-name-input').value.trim() || currentPlan.title || 'Untitled Plan';
-    document.getElementById('name-modal').style.display = 'none';
-    try {
-      const { db, collection, addDoc, serverTimestamp } = window._fb;
-      const uid = window._currentUser.uid;
-      await addDoc(collection(db, 'plans', uid, 'items'), {
-        title:     name,
-        sqft:      currentPlan.totalSqft || 0,
-        rooms:     currentPlan.rooms || [],
-        compliance:currentPlan.codeCompliance || [],
-        summary:   currentPlan.summary || '',
-        createdAt: serverTimestamp(),
-      });
-      showExportToast('Plan saved: "' + name + '"');
-    } catch(e) { showExportToast('Save failed: ' + e.message); }
-  }
+function handlePhotoDrop(evt) {
+  evt.preventDefault();
+  document.getElementById('photo-drop').classList.remove('dragover');
+  const file = evt.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) loadPhotoFile(file);
+}
 
-  // ── Blueprint Upload ───────────────────────────────────────────────────────
-  function handleBpFile(event) {
-    const file = event.target.files[0];
-    if (file) processBpFile(file);
-  }
-
-  function handleBpDrop(event) {
-    event.preventDefault();
-    document.getElementById('bp-upload-area').style.borderColor = 'var(--border)';
-    const file = event.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) processBpFile(file);
-  }
-
-  function processBpFile(file) {
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const base64 = e.target.result.split(',')[1];
-      document.getElementById('bp-thumb').src = e.target.result;
-      document.getElementById('bp-preview').style.display = 'block';
-      document.getElementById('bp-analyzing').style.display = 'block';
-      document.getElementById('bp-detected').style.display = 'none';
-      document.getElementById('modifications-area').style.display = 'none';
-      try {
-        const res  = await fetch('/api/analyze-blueprint', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: base64, mediaType: file.type }),
-        });
-        const data = await res.json();
-        uploadedBpData = data;
-        document.getElementById('bp-analyzing').style.display = 'none';
-        const det = document.getElementById('bp-detected');
-        det.style.display = 'block';
-        const badges = [
-          data.bedrooms   ? `<strong>${data.bedrooms} bed</strong>` : '',
-          data.bathrooms  ? `<strong>${data.bathrooms} bath</strong>` : '',
-          data.totalSqft  ? `<strong>~${Number(data.totalSqft).toLocaleString()} sq ft</strong>` : '',
-          data.stories    ? `<strong>${data.stories} story</strong>` : '',
-        ].filter(Boolean).join(' · ');
-        det.innerHTML = `
-          <div style="font-family:'Cormorant',serif;font-size:1rem;font-weight:500;color:var(--ink);margin-bottom:.3rem;">Blueprint Analyzed ✓</div>
-          ${badges ? `<div style="margin-bottom:.3rem;">${badges}</div>` : ''}
-          ${data.description ? `<div style="font-style:italic;color:var(--sage);font-size:.78rem;">${data.description.slice(0,240)}${data.description.length>240?'…':''}</div>` : ''}`;
-        document.getElementById('modifications-area').style.display = 'block';
-        // Pre-fill description textarea if empty
-        const ta = document.getElementById('description');
-        if (!ta.value && data.description) ta.value = data.description;
-      } catch(err) {
-        document.getElementById('bp-analyzing').style.display = 'none';
-        const det = document.getElementById('bp-detected');
-        det.style.display = 'block';
-        det.innerHTML = `<span style="color:#8b2020;">Could not analyze image: ${err.message}</span>`;
-      }
-    };
-    reader.readAsDataURL(file);
-  }
-
-  function clearBpUpload() {
-    uploadedBpData = null;
-    document.getElementById('bp-file-input').value = '';
-    document.getElementById('bp-preview').style.display = 'none';
-    document.getElementById('modifications-area').style.display = 'none';
-    document.getElementById('bp-upload-area').style.borderColor = 'var(--border)';
-  }
-
-  // ── My Plans Drawer ───────────────────────────────────────────────────────
-  async function openPlansDrawer() {
-    document.getElementById('drawer-overlay').classList.add('open');
-    document.getElementById('plans-drawer').classList.add('open');
-    if (!window._currentUser || !window._fb) return;
-    const body = document.getElementById('drawer-body');
-    body.innerHTML = '<p class="drawer-empty">Loading…</p>';
-    try {
-      const { db, collection, query, orderBy, getDocs } = window._fb;
-      const uid  = window._currentUser.uid;
-      const q    = query(collection(db, 'plans', uid, 'items'), orderBy('createdAt', 'desc'));
-      const snap = await getDocs(q);
-      if (snap.empty) { body.innerHTML = '<p class="drawer-empty">No saved plans yet.</p>'; return; }
-      body.innerHTML = '';
-      snap.forEach(doc => {
-        const d    = doc.data();
-        const card = document.createElement('div');
-        card.className = 'plan-card-saved';
-        const date = d.createdAt?.toDate ? d.createdAt.toDate().toLocaleDateString() : '';
-        card.innerHTML = `<h4>${d.title || 'Untitled'}</h4><p class="meta">${d.sqft?.toLocaleString() || '?'} sq ft · ${date}</p>`;
-        card.onclick = () => { restorePlan(d); closePlansDrawer(); };
-        body.appendChild(card);
-      });
-    } catch(e) {
-      body.innerHTML = `<p class="drawer-empty">Error: ${e.message}</p>`;
-    }
-  }
-
-  function closePlansDrawer() {
-    document.getElementById('drawer-overlay').classList.remove('open');
-    document.getElementById('plans-drawer').classList.remove('open');
-  }
-
-  function restorePlan(d) {
-    currentPlan = d;
-    showResults(d, '', '');
-  }
-
-  // ── Location ──────────────────────────────────────────────────────────────
-  function onStateChange() {
-    const state = document.getElementById('state-select').value;
-    if (!state) return;
-    const city = document.getElementById('city-input').value;
-    showCodeBox(state, city);
-  }
-  function onCityInput() {
-    const state = document.getElementById('state-select').value;
-    const city  = document.getElementById('city-input').value;
-    if (state && city.length > 2) showCodeBox(state, city);
-  }
-  const codeMappings = {
-    'California': { code: 'Title 24', desc: 'California Energy Code (Title 24) + CBC. Strict energy efficiency, seismic zone requirements, and ADU-friendly zoning rules apply.' },
-    'Florida':    { code: 'Florida Building Code 2023', desc: 'FBC 2023 applies. Hurricane-resistant construction, wind load requirements, and flood zone compliance enforced.' },
-    'Texas':      { code: 'IRC 2021 + Local Amendments', desc: 'Texas adopts IRC 2021 with city-level amendments. No state energy code — check municipal requirements.' },
-    'New York':   { code: 'NYS Building Code + NYC Zoning', desc: 'NYS Uniform Code applies statewide. NYC has additional zoning resolutions and fire code requirements.' },
-    'Kentucky':   { code: 'Kentucky Residential Code (KRC)', desc: 'KRC based on IRC 2018. State fire marshal oversees permits. Local amendments vary by county and municipality.' },
-    'Tennessee':  { code: 'Tennessee Building Code 2018', desc: 'TBC 2018 (based on IBC/IRC). State fire code applies to commercial; municipalities handle residential permits.' },
-    'Ohio':       { code: 'Ohio Building Code 2020', desc: 'OBC 2020 in effect. Energy code requires IECC 2018 compliance. Local jurisdictions may have amendments.' },
-    'Georgia':    { code: 'Georgia State Minimum Standard Codes', desc: 'Georgia adopts IBC 2018 / IRC 2018 as minimum standards. Energy code is IECC 2015. Local amendments common.' },
+function loadPhotoFile(file) {
+  if (file.size > 10 * 1024 * 1024) { showToast('File too large (max 10 MB)', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const dataUrl = e.target.result;
+    const base64  = dataUrl.split(',')[1];
+    state.photo   = { base64, mediaType: file.type, file, dataUrl };
+    document.getElementById('photo-thumb').src              = dataUrl;
+    document.getElementById('photo-preview').style.display  = 'block';
+    document.getElementById('photo-drop').style.display     = 'none';
+    document.getElementById('analyze-btn').style.display    = 'inline-flex';
+    document.getElementById('photo-next-btn').style.display = 'inline-flex';
+    document.getElementById('ai-badge').style.display       = 'none';
+    state.aiPhotoData = null;
   };
-  function showCodeBox(state, city) {
-    const box     = document.getElementById('code-box');
-    const mapping = codeMappings[state] || { code: 'IRC 2021 (International Residential Code)', desc: `${state} follows IRC 2021 with state amendments. ${city ? city + ' local' : 'Local'} municipality requirements will be applied automatically.` };
-    document.getElementById('code-title').textContent = `${city ? city + ', ' : ''}${state} — ${mapping.code}`;
-    document.getElementById('code-desc').textContent  = mapping.desc;
-    box.classList.remove('hidden');
-  }
+  reader.readAsDataURL(file);
+}
 
-  function selectType(el, type) {
-    document.querySelectorAll('.type-card').forEach(c => c.classList.remove('selected'));
-    el.classList.add('selected');
-    selectedType = type;
-  }
+function clearPhoto() {
+  state.photo = null; state.aiPhotoData = null;
+  document.getElementById('photo-thumb').src               = '';
+  document.getElementById('photo-preview').style.display   = 'none';
+  document.getElementById('photo-drop').style.display      = '';
+  document.getElementById('analyze-btn').style.display     = 'none';
+  document.getElementById('photo-next-btn').style.display  = 'none';
+  document.getElementById('ai-badge').style.display        = 'none';
+  document.getElementById('photo-input').value             = '';
+}
 
-  function addChip(text) {
-    const ta  = document.getElementById('description');
-    ta.value  = ta.value ? ta.value + ' ' + text + '.' : text + '.';
-    ta.focus();
-  }
-
-  // ── Generate ──────────────────────────────────────────────────────────────
-  async function startGeneration() {
-    const state       = document.getElementById('state-select').value;
-    const city        = document.getElementById('city-input').value;
-    const description = document.getElementById('description').value.trim();
-    if (!state)       { alert('Please select your state first.'); return; }
-    if (!description) { alert('Please describe your home needs first.'); return; }
-
-    document.getElementById('gen-btn').classList.add('hidden');
-    const overlay = document.getElementById('gen-overlay');
-    overlay.classList.add('visible');
-
-    // Animate loading steps
-    const steps  = ['gs1','gs2','gs3','gs4','gs5'];
-    const delays = [0, 900, 1900, 2900, 3800];
-    steps.forEach((id, i) => {
-      setTimeout(() => {
-        if (i > 0) { document.getElementById(steps[i-1]).classList.remove('active'); document.getElementById(steps[i-1]).classList.add('done'); }
-        document.getElementById(id).classList.add('active');
-      }, delays[i]);
+async function analyzePhoto() {
+  if (!state.photo) return;
+  const btn     = document.getElementById('analyze-btn');
+  const spinner = document.getElementById('analyze-spinner');
+  btn.disabled  = true;
+  spinner.style.display = 'inline-block';
+  const endpoint = state.uploadMode === 'blueprint' ? '/api/analyze-blueprint' : '/api/analyze-photo';
+  try {
+    const res  = await fetch(endpoint, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageBase64: state.photo.base64, mediaType: state.photo.mediaType }),
     });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    state.aiPhotoData = data;
+    const badge = document.getElementById('ai-badge');
+    badge.style.display = 'block';
+    if (state.uploadMode === 'blueprint') {
+      if (data.description) document.getElementById('description').value = data.description;
+      if (data.totalSqft)   document.getElementById('sqft').value = data.totalSqft;
+      if (data.bedrooms)    document.getElementById('beds').value = data.bedrooms;
+      if (data.bathrooms)   document.getElementById('baths').value = data.bathrooms;
+      if (data.stories > 1) document.getElementById('stories').value = String(data.stories);
+      badge.innerHTML = `📐 Blueprint analyzed: <strong>${data.estimatedStyle || 'Custom'}</strong> · ${data.totalSqft || '?'} sq ft · ${data.bedrooms || '?'} bed / ${data.bathrooms || '?'} bath`;
+      showToast('Blueprint analyzed! Fields pre-filled.', 'success');
+    } else {
+      if (data.description) document.getElementById('description').value = data.description;
+      badge.innerHTML = `🤖 AI detected: <strong>${data.roomType || 'Room'}</strong> · ${data.estimatedDimensions || 'size estimated'} · ${(data.features || []).slice(0,3).join(', ')}`;
+      showToast('Photo analyzed! Description pre-filled.', 'success');
+    }
+    document.getElementById('photo-next-btn').style.display = 'inline-flex';
+  } catch (e) {
+    showToast('Analysis failed: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    spinner.style.display = 'none';
+  }
+}
 
-    const sqft       = document.getElementById('sqft').value;
-    const stories    = document.getElementById('stories').value;
-    const projectType = selectedType || 'new-home';
+// ── Chips ──────────────────────────────────────────────────────────────────
+function addChip(text) {
+  const ta  = document.getElementById('description');
+  const cur = ta.value.trim();
+  ta.value  = cur ? cur + ', ' + text : text;
+  ta.focus();
+}
 
-    const bpBase = uploadedBpData ? `EXISTING BLUEPRINT TO MODIFY:
-${JSON.stringify(uploadedBpData, null, 2)}
+// ── Space Type ─────────────────────────────────────────────────────────────
+function selectType(el, type) {
+  document.querySelectorAll('#type-grid .option-btn').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+  state.spaceType = type;
+}
 
-REQUESTED MODIFICATIONS: ${document.getElementById('modifications-input').value.trim() || 'Improve and clean up the layout while keeping the overall character'}
+// ── Summary Preview ────────────────────────────────────────────────────────
+function buildSummaryPreview() {
+  collectCurrentStep(3);
+  const loc = [state.location.city, state.location.state, state.location.country].filter(Boolean).join(', ') || 'Not specified';
+  const sizeStr = [
+    state.sqft  ? state.sqft + ' sq ft'  : '',
+    state.beds  ? state.beds + ' bed'    : '',
+    state.baths ? state.baths + ' bath'  : '',
+    state.stories + ' stor' + (state.stories === '1' ? 'y' : 'ies'),
+  ].filter(Boolean).join(' · ');
+  const lines = [
+    `<strong>Location:</strong> ${loc}`,
+    `<strong>Type:</strong> ${state.spaceType || 'Not selected'}`,
+    `<strong>Size:</strong> ${sizeStr || 'Not specified'}`,
+    `<strong>Style:</strong> ${state.style}`,
+    `<strong>Description:</strong> ${state.description || '(none)'}`,
+    state.special ? `<strong>Special Req:</strong> ${state.special}` : null,
+    state.aiPhotoData ? `<strong>AI Analysis:</strong> ${state.uploadMode === 'blueprint' ? 'Blueprint' : 'Photo'} analyzed and pre-filled` : null,
+  ].filter(Boolean);
+  document.getElementById('summary-preview').innerHTML = lines.join('<br>');
+}
 
-Use the existing blueprint as the foundation. Preserve what works and apply the requested modifications.
----
-` : '';
+// ── Loading Animation ──────────────────────────────────────────────────────
+let _loadInterval = null;
+let _loadStep     = 0;
 
-    const prompt = `${bpBase}You are a licensed residential architect. Generate a COMPLETE, code-compliant floor plan as JSON.
+function startLoadingAnimation() {
+  _loadStep = 0;
+  const steps = document.querySelectorAll('.lstep');
+  steps.forEach(s => {
+    s.classList.remove('active', 'done');
+    s.querySelector('.lstep-icon').textContent = '○';
+  });
+  if (steps[0]) {
+    steps[0].classList.add('active');
+    steps[0].querySelector('.lstep-icon').textContent = '◉';
+  }
+  _loadInterval = setInterval(() => {
+    if (_loadStep < steps.length - 1) {
+      steps[_loadStep].classList.remove('active');
+      steps[_loadStep].classList.add('done');
+      steps[_loadStep].querySelector('.lstep-icon').textContent = '✓';
+      _loadStep++;
+      steps[_loadStep].classList.add('active');
+      steps[_loadStep].querySelector('.lstep-icon').textContent = '◉';
+    }
+  }, 3200);
+  return _loadInterval;
+}
 
-LOCATION: ${city ? city + ', ' : ''}${state}
-PROJECT TYPE: ${projectType}
-SQUARE FOOTAGE: ${sqft || 'let the design dictate appropriate size'}
-STORIES: ${stories}
-CLIENT DESCRIPTION: ${description}
+function completeLoadingAnimation() {
+  clearInterval(_loadInterval);
+  document.querySelectorAll('.lstep').forEach(s => {
+    s.classList.remove('active');
+    s.classList.add('done');
+    s.querySelector('.lstep-icon').textContent = '✓';
+  });
+}
 
-Return ONLY valid JSON — no markdown, no explanation. All measurements in FEET.
-COORDINATE SYSTEM: x = distance from west wall, y = distance from north wall (top-left origin, Y increases southward).
+// ── Generate ───────────────────────────────────────────────────────────────
+async function generatePlan() {
+  collectCurrentStep(3);
+  document.querySelector('.wizard-wrap').style.display      = 'none';
+  document.getElementById('generate-loading').style.display = 'block';
+  document.getElementById('result-section').style.display   = 'none';
+  document.getElementById('refine-section').style.display   = 'none';
 
+  startLoadingAnimation();
+
+  const loc = [state.location.city, state.location.state, state.location.country].filter(Boolean).join(', ') || 'Not specified';
+
+  const prompt = `You are an expert architectural designer. Generate a complete, code-compliant 2D floor plan based on these specifications:
+
+LOCATION: ${loc}
+SPACE TYPE: ${state.spaceType || 'Residential'}
+TOTAL SIZE: ${state.sqft || 'Flexible'} sq ft
+BEDROOMS: ${state.beds || 'As needed'}
+BATHROOMS: ${state.baths || 'As needed'}
+STORIES: ${state.stories}
+STYLE: ${state.style}
+DESCRIPTION: ${state.description || 'Standard layout'}
+SPECIAL REQUIREMENTS: ${state.special || 'None'}
+${state.aiPhotoData ? 'AI ANALYSIS: ' + JSON.stringify(state.aiPhotoData) : ''}
+
+Respond with ONLY a valid JSON object (no markdown, no code fences) in this EXACT structure:
 {
-  "title": "Descriptive plan name",
-  "totalSqft": 1850,
-  "bedrooms": 3,
-  "bathrooms": 2,
-  "stories": 1,
-  "exteriorDims": { "width": 54, "depth": 44 },
-  "summary": "3-4 sentences: design concept, room flow, privacy zoning, special features",
-  "localCodeNote": "Specific IRC note for ${state}${city ? ' / ' + city : ''}",
-  "rooms": [
+  "title": "descriptive plan title",
+  "totalSqft": number,
+  "exteriorWidth": number_feet,
+  "exteriorDepth": number_feet,
+  "floors": [
     {
-      "name": "Living Room",
-      "x": 0, "y": 0, "w": 18, "d": 16,
-      "sqft": 288,
-      "notes": "Open to kitchen, vaulted ceiling",
-      "exteriorWalls": ["north","west"],
-      "doors": [
-        { "wall": "east", "pos": 6, "width": 3, "swing": "right" }
-      ],
-      "windows": [
-        { "wall": "north", "pos": 3, "width": 5 },
-        { "wall": "west",  "pos": 4, "width": 4 }
-      ],
-      "closets": [],
-      "fixtures": []
-    },
-    {
-      "name": "Master Bedroom",
-      "x": 0, "y": 22, "w": 14, "d": 14,
-      "sqft": 196,
-      "notes": "Private west wing, walk-in closet",
-      "exteriorWalls": ["west","south"],
-      "doors": [{ "wall": "north", "pos": 8, "width": 3, "swing": "left" }],
-      "windows": [
-        { "wall": "west",  "pos": 4, "width": 3 },
-        { "wall": "south", "pos": 5, "width": 4 }
-      ],
-      "closets": [
-        { "wall": "east", "offset": 1, "width": 6, "depth": 2, "type": "walk-in" }
-      ],
-      "fixtures": []
-    },
-    {
-      "name": "Master Bath",
-      "x": 14, "y": 22, "w": 9, "d": 8,
-      "sqft": 72,
-      "notes": "En-suite, walk-in shower, double vanity",
-      "exteriorWalls": ["south"],
-      "doors": [{ "wall": "west", "pos": 1, "width": 2.8, "swing": "right" }],
-      "windows": [{ "wall": "south", "pos": 3, "width": 2 }],
-      "closets": [],
-      "fixtures": [
-        { "type": "toilet",  "x": 1,   "y": 1   },
-        { "type": "vanity",  "x": 0,   "y": 5,   "width": 5 },
-        { "type": "shower",  "x": 5.5, "y": 1,   "width": 3, "depth": 3 }
-      ]
-    },
-    {
-      "name": "Kitchen",
-      "x": 18, "y": 0, "w": 14, "d": 14,
-      "sqft": 196,
-      "notes": "Open concept, island, work triangle",
-      "exteriorWalls": ["north","east"],
-      "doors": [],
-      "windows": [
-        { "wall": "north", "pos": 4, "width": 3 },
-        { "wall": "east",  "pos": 3, "width": 3 }
-      ],
-      "closets": [],
-      "fixtures": [
-        { "type": "cabinets",     "wall": "north", "offset": 0, "width": 12 },
-        { "type": "cabinets",     "wall": "east",  "offset": 0, "width": 10 },
-        { "type": "range",        "wall": "north", "offset": 3 },
-        { "type": "sink",         "wall": "north", "offset": 8 },
-        { "type": "refrigerator", "wall": "east",  "offset": 0 },
-        { "type": "island",       "x": 3, "y": 5, "width": 5, "depth": 2 }
+      "level": 1,
+      "label": "Ground Floor",
+      "rooms": [
+        {
+          "name": "Master Bedroom",
+          "type": "bedroom",
+          "x": 0,
+          "y": 0,
+          "width": 14,
+          "height": 16,
+          "doors": [{"wall": "south", "offset": 5, "width": 3, "swing": "right"}],
+          "windows": [{"wall": "north", "offset": 3, "width": 4}, {"wall": "east", "offset": 2, "width": 3}]
+        }
       ]
     }
   ],
-  "codeCompliance": [
-    { "icon": "✓", "title": "Egress Windows", "detail": "All bedrooms have IRC R310 egress windows — min 5.7 sq ft net opening, max 44in sill height" },
-    { "icon": "✓", "title": "Minimum Room Sizes", "detail": "All habitable rooms exceed IRC R304 minimums: 70 sq ft floor area, 7ft min dimension, 7ft ceiling" },
-    { "icon": "✓", "title": "Hallway Widths", "detail": "All hallways meet IRC 36in minimum clear width" },
-    { "icon": "✓", "title": "Bathroom Ventilation", "detail": "All bathrooms have operable windows or mechanical exhaust per IRC R303" },
-    { "icon": "✓", "title": "Smoke & CO Detectors", "detail": "Detectors required per NFPA 72: each bedroom, outside sleeping areas, each level" },
-    { "icon": "✓", "title": "Door Clearances", "detail": "All doors meet IRC minimum 32in clear width; exterior entry doors 36in" }
-  ]
+  "compliance": [
+    {"check": "description of compliance check", "status": "pass"}
+  ],
+  "summary": "3-5 sentence design summary"
 }
 
-MANDATORY ARCHITECTURAL RULES:
+STRICT RULES:
+- x,y are feet from top-left corner — absolutely NO room overlaps
+- Rooms must share walls and connect logically (kitchen next to dining, etc.)
+- door.wall must be one of: north, south, east, west
+- door.offset = feet from the near corner of that wall (always fits within wall length)
+- door.swing = "left" or "right" (which end the hinge is on along the wall)
+- door.width is typically 2.5-3 ft for interior, 3 ft for exterior
+- window.offset and window.width are feet along the wall, must fit within wall
+- Every bedroom MUST have at least one window on an exterior wall
+- Every room MUST have at least one door
+- Minimum: bathroom 5×8 ft, bedroom 10×10 ft
+- Include hallways, closets, and circulation space as needed
+- For multi-story plans, each floor has rooms starting at x:0, y:0
+- Include at least 5 compliance checks relevant to ${loc}
+- type must be one of: bedroom, bathroom, kitchen, living, dining, office, garage, utility, hallway, closet, other`;
 
-ROOM COORDINATES: x,y = top-left corner. w = width (east-west feet). d = depth (north-south feet).
-Adjacent rooms MUST share a wall: if room A has x=0 w=18, room B's east side starts at x=18.
-No floating gaps. Single connected footprint. Every room accounted for.
+  try {
+    const res  = await fetch('/api/generate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
 
-REQUIRED ROOMS (include all applicable):
-- Entry/Foyer (min 6×8), Living Room (min 12×15=180sqft), Dining, Kitchen (min 10×12)
-- Master Bedroom (min 12×14=168sqft) + Master Bath (min 8×10) + Walk-in Closet
-- Additional Bedrooms (min 10×11=110sqft each) each with reach-in closet (min 4×2ft)
-- Shared Bath(s) (full bath min 5×8, half bath min 5×5)
-- Hallways (min 3ft wide) connecting bedrooms to living areas
-- Laundry Room (min 6×8), Mudroom (if garage attached)
-- Garage: 2-car=min 20×22ft, 1-car=min 12×22ft
-- Pantry optional (3×4 adjacent to kitchen), Linen Closet in hallway (2×3)
-
-EXTERIOR WALLS: List which walls face outside. Exterior walls MUST have windows.
-Interior shared walls get doors connecting rooms. No exterior doors except entry and garage.
-
-DOORS: pos = feet from start of that wall (NOT a ratio).
-widths: interior=2.8ft, exterior entry=3.0ft, closet=2.0ft, bathroom=2.8ft.
-swing: "right" or "left". Every room needs ≥1 door. Hallways connect all bedrooms.
-
-WINDOWS: pos = feet from start of that wall (NOT a ratio). width in feet.
-Bedrooms: ≥1 egress window (min 3ft wide × 4ft tall) on exterior wall.
-Bathrooms: ≥1 small window (min 2ft wide). Kitchen/living: generous windows.
-Never place window within 1ft of a wall corner.
-
-CLOSETS (REQUIRED for every bedroom):
-Master bedroom: walk-in closet (min 6×5ft), type="walk-in"
-Other bedrooms: reach-in closet (min 4×2ft), type="reach-in"
-offset = feet from start of wall where closet begins.
-Hallways: linen closet (2×3) if space allows.
-
-BATHROOM FIXTURES (REQUIRED for every bathroom):
-Full bath: toilet + vanity + tub or shower (or both)
-Half bath: toilet + vanity only
-toilet: x,y in feet from NW corner of room (1ft from each wall minimum)
-vanity: width in feet (single=2.5ft, double=5ft); place along longest wall
-tub: width=2.5ft, depth=5ft; shower: min 3×3ft
-IRC spacing: toilet 15in from centerline to wall, 21in clear in front.
-
-KITCHEN FIXTURES (REQUIRED):
-cabinets: along north and/or east/south walls (depth 1.5ft), offset+width in feet
-range: 2.5ft wide; sink: 2ft wide; refrigerator: 2.5ft wide — all on cabinet walls
-island: only if kitchen ≥ 10ft wide with 42in clearance on all sides
-Work triangle (sink→range→refrigerator) should total ≤ 26ft.`;
-
-
-    try {
-      // Call our secure proxy — never expose the API key in the browser
-      const res  = await fetch('/api/generate', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ prompt }),
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      const raw   = (data.content || []).map(i => i.text || '').join('');
-      const clean = raw.replace(/```json|```/g, '').trim();
-      const plan  = JSON.parse(clean);
-      setTimeout(() => {
-        document.getElementById('gs5').classList.remove('active');
-        document.getElementById('gs5').classList.add('done');
-        setTimeout(() => showResults(plan, state, city), 400);
-      }, 4500);
-    } catch(err) {
-      // Fallback demo data so the UI never breaks
-      setTimeout(() => showResults(getDemoData(state, city), state, city), 5000);
+    const text = data.content?.[0]?.text || '';
+    let planObj;
+    try { planObj = JSON.parse(text); }
+    catch {
+      const m = text.match(/\{[\s\S]*\}/);
+      planObj = m ? JSON.parse(m[0]) : null;
     }
-  }
+    if (!planObj) throw new Error('Could not parse floor plan from AI response.');
 
-  function getDemoData(state, city) {
-    return {
-      title: "Hillcrest Family Ranch",
-      totalSqft: 1924,
-      bedrooms: 3,
-      bathrooms: 2,
-      stories: 1,
-      exteriorDims: { width: 58, depth: 42 },
-      summary: "A single-story ranch with a zoned layout: public living core in the center, private master suite to the west, two kids' bedrooms to the east sharing a hall bath. The kitchen anchors the plan with a full work triangle, island, and direct connection to the dining and living areas. A mudroom off the two-car garage keeps daily traffic out of the main living areas.",
-      localCodeNote: `${city || state} — IRC 2021 with local amendments. Minimum 5 ft side setback; 20 ft front setback. Plan's 58 ft width is compatible with standard 75 ft lots.`,
-      rooms: [
-        { name:"Foyer",          x:18,  y:0,  w:8,  d:8,  sqft:64,  notes:"Entry with coat closet",
-          exteriorWalls:["north"],
-          doors:[{wall:"north", pos:2, width:3, swing:"right"}, {wall:"south", pos:2, width:3, swing:"right"}],
-          windows:[{wall:"north", pos:4.5, width:2}],
-          closets:[{wall:"east", offset:1, width:4, depth:2, type:"reach-in"}],
-          fixtures:[] },
-        { name:"Living Room",    x:0,   y:0,  w:18, d:16, sqft:288, notes:"Open to kitchen, vaulted ceiling",
-          exteriorWalls:["north","west"],
-          doors:[{wall:"east", pos:12, width:3, swing:"left"}, {wall:"south", pos:1, width:3, swing:"right"}],
-          windows:[{wall:"north", pos:3, width:5}, {wall:"north", pos:11, width:4}, {wall:"west", pos:4, width:4}],
-          closets:[], fixtures:[] },
-        { name:"Kitchen",        x:26,  y:0,  w:14, d:14, sqft:196, notes:"Work triangle, island, open to dining",
-          exteriorWalls:["north","east"],
-          doors:[],
-          windows:[{wall:"north", pos:4, width:3}, {wall:"east", pos:3, width:3}],
-          closets:[],
-          fixtures:[
-            {type:"cabinets", wall:"north", offset:0, width:12},
-            {type:"cabinets", wall:"east",  offset:0, width:10},
-            {type:"range",        wall:"north", offset:3},
-            {type:"sink",         wall:"north", offset:8},
-            {type:"refrigerator", wall:"east",  offset:0},
-            {type:"island", x:3, y:6, width:5, depth:2}
-          ] },
-        { name:"Dining",         x:18,  y:8,  w:8,  d:14, sqft:112, notes:"Adjacent to kitchen and living",
-          exteriorWalls:[],
-          doors:[{wall:"west", pos:4, width:3, swing:"left"}, {wall:"east", pos:4, width:3, swing:"right"}],
-          windows:[], closets:[], fixtures:[] },
-        { name:"Hallway",        x:0,   y:16, w:4,  d:26, sqft:104, notes:"Main corridor — 4 ft wide",
-          exteriorWalls:["west"],
-          doors:[], windows:[{wall:"west", pos:10, width:2}], closets:[], fixtures:[] },
-        { name:"Master Bedroom", x:4,   y:16, w:14, d:15, sqft:210, notes:"Private suite, walk-in closet",
-          exteriorWalls:["south"],
-          doors:[{wall:"west", pos:8, width:3, swing:"right"}],
-          windows:[{wall:"south", pos:3, width:5}, {wall:"south", pos:9, width:3}],
-          closets:[{wall:"east", offset:1, width:7, depth:2.5, type:"walk-in"}],
-          fixtures:[] },
-        { name:"Master Bath",    x:18,  y:22, w:10, d:9,  sqft:90,  notes:"Double vanity, walk-in shower",
-          exteriorWalls:["south"],
-          doors:[{wall:"west", pos:1, width:2.8, swing:"right"}],
-          windows:[{wall:"south", pos:4, width:2}],
-          closets:[],
-          fixtures:[
-            {type:"toilet", x:1,   y:1},
-            {type:"vanity", x:0,   y:5.5, width:5.5},
-            {type:"shower", x:6.5, y:1,   width:3, depth:3.5}
-          ] },
-        { name:"Bedroom 2",      x:4,   y:30, w:12, d:12, sqft:144, notes:"South-facing, reach-in closet",
-          exteriorWalls:["south","west"],
-          doors:[{wall:"north", pos:7, width:2.8, swing:"left"}],
-          windows:[{wall:"south", pos:3, width:4}, {wall:"west", pos:4, width:3}],
-          closets:[{wall:"east", offset:1, width:5, depth:2, type:"reach-in"}],
-          fixtures:[] },
-        { name:"Bedroom 3",      x:16,  y:30, w:12, d:12, sqft:144, notes:"South-facing, reach-in closet",
-          exteriorWalls:["south","east"],
-          doors:[{wall:"north", pos:1, width:2.8, swing:"right"}],
-          windows:[{wall:"south", pos:3, width:4}, {wall:"east", pos:4, width:3}],
-          closets:[{wall:"west", offset:1, width:5, depth:2, type:"reach-in"}],
-          fixtures:[] },
-        { name:"Hall Bath",      x:4,   y:42, w:9,  d:8,  sqft:72,  notes:"Shared full bath",
-          exteriorWalls:["south"],
-          doors:[{wall:"north", pos:1, width:2.8, swing:"right"}],
-          windows:[{wall:"south", pos:3.5, width:2}],
-          closets:[],
-          fixtures:[
-            {type:"toilet", x:1,   y:1},
-            {type:"vanity", x:0,   y:5,   width:3.5},
-            {type:"tub",    x:4.5, y:1.5, width:2.5, depth:5}
-          ] },
-        { name:"Laundry",        x:28,  y:22, w:8,  d:8,  sqft:64,  notes:"Main floor, near bedrooms",
-          exteriorWalls:["east"],
-          doors:[{wall:"west", pos:1, width:2.8, swing:"left"}],
-          windows:[{wall:"east", pos:2, width:2}],
-          closets:[], fixtures:[] },
-        { name:"Mudroom",        x:36,  y:14, w:8,  d:10, sqft:80,  notes:"Garage entry, bench + hooks",
-          exteriorWalls:[],
-          doors:[{wall:"east", pos:2, width:3, swing:"right"}, {wall:"north", pos:2, width:3, swing:"left"}],
-          windows:[], closets:[], fixtures:[] },
-        { name:"Garage",         x:40,  y:0,  w:22, d:22, sqft:484, notes:"2-car attached",
-          exteriorWalls:["north","east","south"],
-          doors:[{wall:"south", pos:16, width:2.8, swing:"left"}],
-          windows:[{wall:"north", pos:1, width:3}, {wall:"east", pos:8, width:2}],
-          closets:[], fixtures:[] },
-      ],
-      codeCompliance: [
-        {icon:"✓", title:"Egress Windows",      detail:"All bedrooms meet IRC R310: min 5.7 sq ft net opening, max 44 in sill height, min 24 in height × 20 in width"},
-        {icon:"✓", title:"Minimum Room Sizes",  detail:"All habitable rooms exceed IRC R304 minimums: 70 sq ft floor area, 7 ft minimum horizontal dimension, 7 ft ceiling height"},
-        {icon:"✓", title:"Hallway Width",        detail:"Main corridor is 4 ft (48 in) wide — exceeds IRC minimum of 36 in"},
-        {icon:"✓", title:"Bathroom Ventilation",detail:"All bathrooms have operable windows providing >3 sq ft glazing per IRC R303.3; mechanical fan backup recommended"},
-        {icon:"✓", title:"Smoke & CO Detectors",detail:"Required per NFPA 72: inside each bedroom, outside each sleeping area, on each floor level"},
-        {icon:"✓", title:"Bathroom Fixture Clearances", detail:"Toilets: 15 in from centerline to wall, 21 in clear in front. Shower: 30×30 in minimum per IRC P2708"}
-      ]
-    };
-  }
-
-  function showResults(plan, state, city) {
-    currentPlan = plan;
-    const overlay = document.getElementById('gen-overlay');
-    overlay.classList.remove('visible');
-
-    ['dot-1','dot-2','dot-3','dot-4'].forEach(id => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      el.classList.remove('active');
-      el.classList.add('done');
-      el.textContent = '✓';
-    });
-    ['line-1','line-2','line-3'].forEach(id => { const el = document.getElementById(id); if(el) el.classList.add('done'); });
-    ['lbl-1','lbl-2','lbl-3','lbl-4'].forEach(id => { const el = document.getElementById(id); if(el) el.classList.add('active'); });
-
-    document.getElementById('result-title').textContent = plan.title || 'Your Custom Floor Plan';
-    document.getElementById('result-meta').textContent  =
-      `${plan.totalSqft?.toLocaleString() || '—'} sq ft  ·  ${plan.bedrooms || '—'} bed  ·  ${plan.bathrooms || '—'} bath  ·  ${plan.stories === 1 ? 'Single Story' : (plan.stories || '') + ' Story'}  ·  ${city ? city + ', ' : ''}${state}`;
-
-    document.getElementById('ai-summary-text').innerHTML =
-      `<strong>Design Rationale:</strong> ${plan.summary || ''}` +
-      (plan.localCodeNote ? `<br/><br/><strong>Local Code Note:</strong> ${plan.localCodeNote}` : '');
-
-    const tbody = document.getElementById('room-tbody');
-    tbody.innerHTML = '';
-    (plan.rooms || []).forEach(r => {
-      const rW = r.w || r.width || '?';
-      const rD = r.d || r.depth || '?';
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${r.name}</td><td>${rW}′ × ${rD}′</td><td>${r.sqft ? r.sqft + ' sq ft' : '—'}</td><td><span class="tag">${r.notes || ''}</span></td>`;
-      tbody.appendChild(tr);
-    });
-
-    document.getElementById('compliance-subtitle').textContent = `Verified against ${city ? city + ', ' : ''}${state || 'local'} building codes.`;
-    const cgrid = document.getElementById('compliance-grid');
-    cgrid.innerHTML = '';
-    (plan.codeCompliance || []).forEach(c => {
-      cgrid.innerHTML += `
-        <div class="compliance-item">
-          <div class="compliance-icon">${c.icon || '✓'}</div>
-          <div class="compliance-text">
-            <h5>${c.title}</h5>
-            <p>${c.detail}</p>
-            <span class="badge-pass">✓ Pass</span>
-          </div>
-        </div>`;
-    });
-
-    drawBlueprint(plan);
-
-    // Show save button if signed in
-    if (window._currentUser) {
-      document.getElementById('save-btn').classList.add('visible');
+    // Forward compat: wrap old flat rooms array
+    if (planObj.rooms && !planObj.floors) {
+      planObj.floors = [{ level: 1, label: 'Ground Floor', rooms: planObj.rooms }];
     }
 
-    document.getElementById('result-section').classList.add('visible');
-    document.getElementById('result-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    completeLoadingAnimation();
+    state.generatedPlan = planObj;
+    state.currentFloor  = 0;
+
+    setTimeout(() => {
+      renderResult(planObj);
+      if (window._currentUser) document.getElementById('auth-save-btn').classList.add('visible');
+    }, 700);
+
+  } catch (e) {
+    clearInterval(_loadInterval);
+    showToast('Generation failed: ' + e.message, 'error');
+    document.querySelector('.wizard-wrap').style.display      = '';
+    document.getElementById('generate-loading').style.display = 'none';
+  }
+}
+
+// ── Render Result ──────────────────────────────────────────────────────────
+function renderResult(plan) {
+  document.getElementById('generate-loading').style.display = 'none';
+  document.getElementById('result-section').style.display   = 'block';
+  document.getElementById('refine-section').style.display   = 'block';
+  document.getElementById('result-title').textContent       = plan.title || 'Your Floor Plan';
+
+  const floors = plan.floors || [{ level: 1, label: 'Ground Floor', rooms: plan.rooms || [] }];
+  const floor  = floors[state.currentFloor] || floors[0];
+  const rooms  = floor.rooms || [];
+
+  renderFloorTabs(plan);
+  renderBlueprintSVG(rooms);
+  renderRoomList(rooms);
+  renderCompliance(plan.compliance || []);
+  document.getElementById('summary-text').textContent = plan.summary || '';
+  window.scrollTo({ top: document.getElementById('result-section').offsetTop - 80, behavior: 'smooth' });
+}
+
+// ── Floor Tabs ─────────────────────────────────────────────────────────────
+function renderFloorTabs(plan) {
+  const tabsEl = document.getElementById('floor-tabs');
+  const floors = plan.floors || [];
+  if (floors.length <= 1) { tabsEl.style.display = 'none'; return; }
+  tabsEl.style.display = 'flex';
+  tabsEl.innerHTML = '';
+  floors.forEach((floor, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'floor-tab' + (i === state.currentFloor ? ' active' : '');
+    btn.textContent = floor.label || 'Floor ' + floor.level;
+    btn.onclick = () => {
+      state.currentFloor = i;
+      renderFloorTabs(plan);
+      renderBlueprintSVG(floor.rooms || []);
+      renderRoomList(floor.rooms || []);
+    };
+    tabsEl.appendChild(btn);
+  });
+}
+
+// ── Professional Blueprint SVG Renderer ───────────────────────────────────
+function renderBlueprintSVG(rooms) {
+  const NS    = 'http://www.w3.org/2000/svg';
+  const svgEl = document.getElementById('floor-plan-svg');
+  svgEl.innerHTML = '';
+
+  function mk(tag, attrs) {
+    const el = document.createElementNS(NS, tag);
+    if (attrs) for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+    return el;
   }
 
-  function drawBlueprint(plan) {
-    const svg   = document.getElementById('bp-svg');
-    const rooms = plan.rooms || [];
-    if (!rooms.length) { svg.innerHTML = ''; return; }
+  if (!rooms || !rooms.length) {
+    svgEl.setAttribute('viewBox', '0 0 580 480');
+    const t = mk('text', { x: 290, y: 240, 'text-anchor': 'middle', fill: '#8892a4',
+      'font-size': 14, 'font-family': 'Inter,system-ui,sans-serif' });
+    t.textContent = 'No rooms generated';
+    svgEl.appendChild(t);
+    return;
+  }
 
-    // ── Dimension helpers (support both old width/depth and new w/d) ──────
-    const RW = r => r.w || r.width  || 10;
-    const RD = r => r.d || r.depth  || 10;
+  // Canvas dimensions
+  const PAD     = 3.5;  // ft padding
+  const TITLE_H = 44;   // px title block height
+  const VW      = 580;
+  const VH      = 480;
 
-    // ── Compute bounds & scale ────────────────────────────────────────────
-    let maxX = 0, maxY = 0;
-    rooms.forEach(r => {
-      maxX = Math.max(maxX, (r.x||0) + RW(r));
-      maxY = Math.max(maxY, (r.y||0) + RD(r));
-    });
-    const SVG_W = 750, SVG_H = 500, TITLE_H = 36, FOOT_H = 55, PAD = 3;
-    const scale = Math.min(
-      (SVG_W - 80) / (maxX + PAD*2),
-      (SVG_H - TITLE_H - FOOT_H) / (maxY + PAD*2)
-    );
-    const offX = (SVG_W - maxX * scale) / 2;
-    const offY = TITLE_H + PAD * scale;
-    const px = x => offX + x * scale;
-    const py = y => offY + y * scale;
-    const ps = f => f * scale;
+  const maxX = Math.max(...rooms.map(r => r.x + r.width));
+  const maxY = Math.max(...rooms.map(r => r.y + r.height));
+  const scale = Math.min(VW / (maxX + PAD * 2), (VH - TITLE_H - 10) / (maxY + PAD * 2));
+  const offX  = PAD * scale;
+  const offY  = PAD * scale;
 
-    // Wall thickness in px (exterior heavier)
-    const WE = Math.max(3.5, scale * 0.6);   // exterior
-    const WI = Math.max(2,   scale * 0.32);  // interior
+  svgEl.setAttribute('viewBox', `0 0 ${VW} ${VH}`);
 
-    // Colours
-    const BG      = '#060e1e';
-    const WEXT    = 'rgba(180,230,200,0.97)'; // exterior wall
-    const WINT    = 'rgba(130,185,155,0.85)'; // interior wall
-    const WIN_C   = 'rgba(100,180,255,1)';    // window glass
-    const WIN_F   = 'rgba(100,180,255,0.15)'; // window fill
-    const DOOR_C  = 'rgba(200,240,215,0.85)'; // door swing
-    const FILL_C  = 'rgba(102,140,102,0.08)'; // room fill
-    const CLO_C   = 'rgba(80,110,90,0.22)';   // closet fill
-    const CLO_S   = 'rgba(130,185,155,0.7)';  // closet stroke
-    const FIX_C   = 'rgba(120,190,165,0.8)';  // fixture stroke
-    const FIX_F   = 'rgba(120,190,165,0.12)'; // fixture fill
-    const LABEL   = 'rgba(200,245,215,0.92)';
-    const DIM     = 'rgba(130,175,150,0.75)';
+  // ── Background ──
+  svgEl.appendChild(mk('rect', { width: VW, height: VH, fill: '#0a1628' }));
 
-    // ── Opening pixel position helper (handles pos-in-feet or offset 0–1) ─
-    const openPx = (item, wallLenPx) => {
-      if (item.pos  !== undefined) return item.pos * scale;
-      if (item.offset !== undefined && item.offset <= 1.5) return item.offset * wallLenPx; // ratio
-      return (item.offset || 0) * scale; // offset in feet
-    };
+  // ── Dot grid (only draw if scale large enough) ──
+  const dotStep = 5 * scale;
+  if (dotStep >= 8) {
+    const defs = mk('defs');
+    const pat  = mk('pattern', { id: 'bp-dotgrid', width: dotStep, height: dotStep, patternUnits: 'userSpaceOnUse' });
+    pat.appendChild(mk('circle', { cx: dotStep / 2, cy: dotStep / 2, r: '0.9', fill: 'rgba(100,140,200,0.22)' }));
+    defs.appendChild(pat);
+    svgEl.appendChild(defs);
+    svgEl.appendChild(mk('rect', { width: VW, height: VH - TITLE_H, fill: 'url(#bp-dotgrid)' }));
+  }
 
-    let h = `<rect width="${SVG_W}" height="${SVG_H}" fill="${BG}" rx="8"/>`;
-    h += `<text x="${SVG_W/2}" y="23" text-anchor="middle" fill="${LABEL}" font-family="Cormorant,serif" font-size="13" letter-spacing="1.5">${(plan.title||'FLOOR PLAN').toUpperCase()}</text>`;
-    h += `<line x1="40" y1="31" x2="${SVG_W-40}" y2="31" stroke="rgba(130,175,150,0.25)" stroke-width="1"/>`;
+  // Room type fills and label colors
+  const FILLS = {
+    bedroom:'#0f1e3a', bathroom:'#081a10', kitchen:'#1a1208',
+    living:'#120820',  dining:'#1a0810',   office:'#081218',
+    garage:'#141414',  utility:'#101010',  hallway:'#0d0d14',
+    closet:'#0a0a12',  other:'#0d0d12'
+  };
+  const LABEL_C = {
+    bedroom:'#7eb3f5', bathroom:'#5be89e', kitchen:'#f5c842',
+    living:'#b084f5',  dining:'#f58ea8',   office:'#5bc8d8',
+    garage:'#a0a0a0',  utility:'#b0a8a0',  hallway:'#9090b8',
+    closet:'#8888aa',  other:'#b0b0b0'
+  };
 
-    // ── 1. Room fills ─────────────────────────────────────────────────────
-    rooms.forEach(r => {
-      h += `<rect x="${px(r.x||0)}" y="${py(r.y||0)}" width="${ps(RW(r))}" height="${ps(RD(r))}" fill="${FILL_C}"/>`;
-    });
+  const WALL_C = 'rgba(185,210,240,0.9)';
+  const WALL_W = Math.max(2.5, scale * 0.13);
 
-    // ── 2. Closets ────────────────────────────────────────────────────────
-    rooms.forEach(r => {
-      const rx0 = r.x||0, ry0 = r.y||0;
-      (r.closets||[]).forEach(c => {
-        let cx, cy, cw, cd;
-        const ofs = c.offset || 0;
-        if      (c.wall === 'north') { cx=rx0+ofs; cy=ry0;           cw=c.width||4; cd=c.depth||2; }
-        else if (c.wall === 'south') { cx=rx0+ofs; cy=ry0+RD(r)-( c.depth||2); cw=c.width||4; cd=c.depth||2; }
-        else if (c.wall === 'west')  { cx=rx0;     cy=ry0+ofs;       cw=c.depth||2; cd=c.width||4; }
-        else if (c.wall === 'east')  { cx=rx0+RW(r)-(c.depth||2); cy=ry0+ofs; cw=c.depth||2; cd=c.width||4; }
-        else return;
-        const cpx=px(cx), cpy=py(cy), cpw=ps(cw), cpd=ps(cd);
-        h += `<rect x="${cpx}" y="${cpy}" width="${cpw}" height="${cpd}" fill="${CLO_C}" stroke="${CLO_S}" stroke-width="1.5"/>`;
-        // Hanging rod with end circles
-        const isHoriz = (c.wall === 'north' || c.wall === 'south');
+  // ── Draw each room ──
+  rooms.forEach(r => {
+    const px = r.x * scale + offX;
+    const py = r.y * scale + offY;
+    const pw = r.width  * scale;
+    const ph = r.height * scale;
+    const t  = (r.type || 'other').toLowerCase();
+
+    const doors   = r.doors   || [];
+    const windows = r.windows || [];
+
+    // Room fill
+    svgEl.appendChild(mk('rect', { x: px, y: py, width: pw, height: ph, fill: FILLS[t] || '#0d0d12' }));
+
+    // Helper: pixel gaps for a given wall
+    function wallGaps(wallName) {
+      const items = [
+        ...doors.filter(d => d.wall === wallName).map(d => ({ ...d, isDoor: true })),
+        ...windows.filter(w => w.wall === wallName).map(w => ({ ...w, isWindow: true })),
+      ];
+      return items.map(item => ({
+        start: (item.offset || 0) * scale,
+        end:   ((item.offset || 0) + (item.width || 3)) * scale,
+        ...item,
+      })).sort((a, b) => a.start - b.start);
+    }
+
+    // Helper: draw wall with gaps (line segments)
+    function drawWall(wx1, wy1, wx2, wy2, isHoriz, gaps) {
+      let cur = 0;
+      const total = isHoriz ? (wx2 - wx1) : (wy2 - wy1);
+      function seg(from, to) {
+        if (to - from < 0.5) return;
         if (isHoriz) {
-          const ry2 = cpy + cpd*0.55;
-          h += `<line x1="${cpx+4}" y1="${ry2}" x2="${cpx+cpw-4}" y2="${ry2}" stroke="${CLO_S}" stroke-width="2"/>`;
-          h += `<circle cx="${cpx+4}" cy="${ry2}" r="2.5" fill="${CLO_S}"/>`;
-          h += `<circle cx="${cpx+cpw-4}" cy="${ry2}" r="2.5" fill="${CLO_S}"/>`;
+          svgEl.appendChild(mk('line', { x1: wx1 + from, y1: wy1, x2: wx1 + to, y2: wy1,
+            stroke: WALL_C, 'stroke-width': WALL_W, 'stroke-linecap': 'square' }));
         } else {
-          const rx2 = cpx + cpw*0.55;
-          h += `<line x1="${rx2}" y1="${cpy+4}" x2="${rx2}" y2="${cpy+cpd-4}" stroke="${CLO_S}" stroke-width="2"/>`;
-          h += `<circle cx="${rx2}" cy="${cpy+4}" r="2.5" fill="${CLO_S}"/>`;
-          h += `<circle cx="${rx2}" cy="${cpy+cpd-4}" r="2.5" fill="${CLO_S}"/>`;
+          svgEl.appendChild(mk('line', { x1: wx1, y1: wy1 + from, x2: wx1, y2: wy1 + to,
+            stroke: WALL_C, 'stroke-width': WALL_W, 'stroke-linecap': 'square' }));
         }
-        // Closet label
-        const cLabel = c.type==='walk-in' ? 'WIC' : 'CLO';
-        const cfs = Math.max(6, Math.min(9, cpw/5));
-        if (cpw > 24 && cpd > 14) {
-          h += `<text x="${cpx+cpw/2}" y="${cpy+cpd/2+3}" text-anchor="middle" fill="${LABEL}" font-family="PT Serif,serif" font-size="${cfs}" opacity="0.7">${cLabel}</text>`;
-        }
-      });
-    });
+      }
+      for (const g of gaps) {
+        if (g.start > cur) seg(cur, g.start);
+        cur = g.end;
+      }
+      if (cur < total) seg(cur, total);
+    }
 
-    // ── 3. Walls with door/window gaps ───────────────────────────────────
-    rooms.forEach(r => {
-      const rx = px(r.x||0), ry = py(r.y||0);
-      const rw = ps(RW(r)), rd = ps(RD(r));
-      const extWalls = r.exteriorWalls || [];
-      const doors    = r.doors   || [];
-      const windows  = r.windows || [];
+    drawWall(px,      py,      px + pw, py,      true,  wallGaps('north'));
+    drawWall(px,      py + ph, px + pw, py + ph, true,  wallGaps('south'));
+    drawWall(px + pw, py,      px + pw, py + ph, false, wallGaps('east'));
+    drawWall(px,      py,      px,      py + ph, false, wallGaps('west'));
 
-      const wallDefs = {
-        north: { horiz:true,  x0:rx,    y0:ry,    len:rw },
-        south: { horiz:true,  x0:rx,    y0:ry+rd, len:rw },
-        west:  { horiz:false, x0:rx,    y0:ry,    len:rd },
-        east:  { horiz:false, x0:rx+rw, y0:ry,    len:rd },
-      };
+    // ── Door symbols ──
+    doors.forEach(door => {
+      const dw    = (door.width  || 3) * scale;
+      const off   = (door.offset || 0) * scale;
+      const swing = door.swing || 'right';
+      const w     = door.wall;
+      let panel, arc;
 
-      ['north','south','west','east'].forEach(wn => {
-        const w     = wallDefs[wn];
-        const isExt = extWalls.includes(wn);
-        const wCol  = isExt ? WEXT : WINT;
-        const wW    = isExt ? WE   : WI;
-        const ops   = [];
+      const pa = { stroke: WALL_C, 'stroke-width': WALL_W * 0.65, opacity: '0.85' };
+      const aa = { fill: 'none', stroke: WALL_C, 'stroke-width': WALL_W * 0.45,
+                   'stroke-dasharray': '3 2', opacity: '0.6' };
 
-        doors.filter(d => d.wall===wn).forEach(d => {
-          const s = openPx(d, w.len);
-          ops.push({s, e: s + ps(d.width||2.8), type:'door'});
-        });
-        windows.filter(win => win.wall===wn).forEach(win => {
-          const s = openPx(win, w.len);
-          ops.push({s, e: s + ps(win.width||3), type:'win'});
-        });
-        ops.sort((a,b)=>a.s-b.s);
-
-        let cur = 0;
-        const seg = (from, to) => {
-          if (to <= from) return;
-          if (w.horiz) h += `<line x1="${w.x0+from}" y1="${w.y0}" x2="${w.x0+to}" y2="${w.y0}" stroke="${wCol}" stroke-width="${wW}" stroke-linecap="square"/>`;
-          else         h += `<line x1="${w.x0}" y1="${w.y0+from}" x2="${w.x0}" y2="${w.y0+to}" stroke="${wCol}" stroke-width="${wW}" stroke-linecap="square"/>`;
-        };
-        ops.forEach(op => { seg(cur, op.s); cur = op.e; });
-        seg(cur, w.len);
-      });
-    });
-
-    // ── 4. Window glass symbols ───────────────────────────────────────────
-    rooms.forEach(r => {
-      const rx = px(r.x||0), ry = py(r.y||0);
-      const rw = ps(RW(r)), rd = ps(RD(r));
-      (r.windows||[]).forEach(win => {
-        const wPx = ps(win.width||3);
-        const G = 3.5;
-        if (win.wall==='north'||win.wall==='south') {
-          const wx = rx + openPx(win, rw);
-          const wy = win.wall==='north' ? ry : ry+rd;
-          h += `<rect x="${wx}" y="${wy-G}" width="${wPx}" height="${G*2}" fill="${WIN_F}"/>`;
-          h += `<line x1="${wx}" y1="${wy-G}" x2="${wx+wPx}" y2="${wy-G}" stroke="${WIN_C}" stroke-width="1.2"/>`;
-          h += `<line x1="${wx}" y1="${wy}"   x2="${wx+wPx}" y2="${wy}"   stroke="${WIN_C}" stroke-width="2.5"/>`;
-          h += `<line x1="${wx}" y1="${wy+G}" x2="${wx+wPx}" y2="${wy+G}" stroke="${WIN_C}" stroke-width="1.2"/>`;
+      if (w === 'north') {
+        const gy = py, gx1 = px + off, gx2 = px + off + dw;
+        if (swing === 'left') {
+          panel = mk('line', { x1: gx1, y1: gy, x2: gx1, y2: gy + dw, ...pa });
+          arc   = mk('path', { d: `M ${gx2} ${gy} A ${dw} ${dw} 0 0 0 ${gx1} ${gy + dw}`, ...aa });
         } else {
-          const wy = ry + openPx(win, rd);
-          const wx = win.wall==='west' ? rx : rx+rw;
-          h += `<rect x="${wx-G}" y="${wy}" width="${G*2}" height="${wPx}" fill="${WIN_F}"/>`;
-          h += `<line x1="${wx-G}" y1="${wy}" x2="${wx-G}" y2="${wy+wPx}" stroke="${WIN_C}" stroke-width="1.2"/>`;
-          h += `<line x1="${wx}"   y1="${wy}" x2="${wx}"   y2="${wy+wPx}" stroke="${WIN_C}" stroke-width="2.5"/>`;
-          h += `<line x1="${wx+G}" y1="${wy}" x2="${wx+G}" y2="${wy+wPx}" stroke="${WIN_C}" stroke-width="1.2"/>`;
+          panel = mk('line', { x1: gx2, y1: gy, x2: gx2, y2: gy + dw, ...pa });
+          arc   = mk('path', { d: `M ${gx1} ${gy} A ${dw} ${dw} 0 0 1 ${gx2} ${gy + dw}`, ...aa });
         }
-      });
-    });
-
-    // ── 5. Door swings ────────────────────────────────────────────────────
-    rooms.forEach(r => {
-      const rx = px(r.x||0), ry = py(r.y||0);
-      const rw = ps(RW(r)), rd = ps(RD(r));
-      (r.doors||[]).forEach(d => {
-        const dPx = ps(d.width||2.8);
-        const isR = (d.swing||d.direction||'right')==='right';
-        const drawDoor = (hx, hy, wall) => {
-          if (wall==='north') {
-            const ox = hx + (isR?0:dPx), dx = isR?dPx:-dPx;
-            h += `<line x1="${ox}" y1="${hy}" x2="${ox+dx}" y2="${hy}" stroke="${DOOR_C}" stroke-width="1.8"/>`;
-            h += `<path d="M${ox+dx},${hy} A${dPx},${dPx} 0 0,${isR?0:1} ${ox},${hy+dPx}" stroke="${DOOR_C}" stroke-width="1" fill="none" stroke-dasharray="3,2"/>`;
-          } else if (wall==='south') {
-            const ox = hx + (isR?0:dPx), dx = isR?dPx:-dPx;
-            h += `<line x1="${ox}" y1="${hy}" x2="${ox+dx}" y2="${hy}" stroke="${DOOR_C}" stroke-width="1.8"/>`;
-            h += `<path d="M${ox+dx},${hy} A${dPx},${dPx} 0 0,${isR?1:0} ${ox},${hy-dPx}" stroke="${DOOR_C}" stroke-width="1" fill="none" stroke-dasharray="3,2"/>`;
-          } else if (wall==='west') {
-            const oy = hy + (isR?0:dPx), dy = isR?dPx:-dPx;
-            h += `<line x1="${hx}" y1="${oy}" x2="${hx}" y2="${oy+dy}" stroke="${DOOR_C}" stroke-width="1.8"/>`;
-            h += `<path d="M${hx},${oy+dy} A${dPx},${dPx} 0 0,${isR?1:0} ${hx+dPx},${oy}" stroke="${DOOR_C}" stroke-width="1" fill="none" stroke-dasharray="3,2"/>`;
-          } else if (wall==='east') {
-            const oy = hy + (isR?0:dPx), dy = isR?dPx:-dPx;
-            h += `<line x1="${hx}" y1="${oy}" x2="${hx}" y2="${oy+dy}" stroke="${DOOR_C}" stroke-width="1.8"/>`;
-            h += `<path d="M${hx},${oy+dy} A${dPx},${dPx} 0 0,${isR?0:1} ${hx-dPx},${oy}" stroke="${DOOR_C}" stroke-width="1" fill="none" stroke-dasharray="3,2"/>`;
-          }
-        };
-        if (d.wall==='north') drawDoor(rx + openPx(d, rw), ry, 'north');
-        else if (d.wall==='south') drawDoor(rx + openPx(d, rw), ry+rd, 'south');
-        else if (d.wall==='west')  drawDoor(rx, ry + openPx(d, rd), 'west');
-        else if (d.wall==='east')  drawDoor(rx+rw, ry + openPx(d, rd), 'east');
-      });
-    });
-
-    // ── 6. Fixtures (bathroom & kitchen) ─────────────────────────────────
-    rooms.forEach(r => {
-      const rx0=r.x||0, ry0=r.y||0;
-      (r.fixtures||[]).forEach(f => {
-        // For wall-anchored fixtures, compute pixel position
-        const fxAbs = (f.x!==undefined) ? px(rx0+(f.x||0)) : null;
-        const fyAbs = (f.y!==undefined) ? py(ry0+(f.y||0)) : null;
-
-        if (f.type==='toilet') {
-          const fx=fxAbs||px(rx0+1), fy=fyAbs||py(ry0+1);
-          // Tank
-          h += `<rect x="${fx}" y="${fy}" width="${ps(1.4)}" height="${ps(0.65)}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1.2" rx="2"/>`;
-          // Bowl
-          h += `<ellipse cx="${fx+ps(0.7)}" cy="${fy+ps(1.2)}" rx="${ps(0.62)}" ry="${ps(0.5)}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1.2"/>`;
-
-        } else if (f.type==='vanity') {
-          const fw=ps(f.width||3);
-          let fx2=fxAbs||px(rx0), fy2=fyAbs||py(ry0+RD(r)-1.7);
-          h += `<rect x="${fx2}" y="${fy2}" width="${fw}" height="${ps(1.7)}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1.2" rx="2"/>`;
-          // Sink bowl(s)
-          const bowls = f.width >= 4.5 ? 2 : 1;
-          for(let b=0;b<bowls;b++){
-            h += `<ellipse cx="${fx2+fw*(b+0.5)/bowls}" cy="${fy2+ps(0.85)}" rx="${ps(0.38)}" ry="${ps(0.32)}" fill="none" stroke="${FIX_C}" stroke-width="1"/>`;
-          }
-
-        } else if (f.type==='tub') {
-          const tw=ps(f.width||2.5), td=ps(f.depth||5);
-          h += `<rect x="${fxAbs||px(rx0+1)}" y="${fyAbs||py(ry0+1)}" width="${tw}" height="${td}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1.2" rx="3"/>`;
-          h += `<rect x="${(fxAbs||px(rx0+1))+4}" y="${(fyAbs||py(ry0+1))+4}" width="${tw-8}" height="${td-8}" fill="none" stroke="${FIX_C}" stroke-width="0.8" rx="2"/>`;
-          // Faucet
-          h += `<circle cx="${(fxAbs||px(rx0+1))+tw/2}" cy="${(fyAbs||py(ry0+1))+10}" r="3" fill="${FIX_C}" opacity="0.6"/>`;
-
-        } else if (f.type==='shower') {
-          const sw=ps(f.width||3), sd=ps(f.depth||3);
-          const sx=fxAbs||px(rx0+1), sy=fyAbs||py(ry0+1);
-          h += `<rect x="${sx}" y="${sy}" width="${sw}" height="${sd}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1.2"/>`;
-          h += `<line x1="${sx}" y1="${sy}" x2="${sx+sw}" y2="${sy+sd}" stroke="${FIX_C}" stroke-width="0.7" opacity="0.4"/>`;
-          h += `<line x1="${sx+sw}" y1="${sy}" x2="${sx}" y2="${sy+sd}" stroke="${FIX_C}" stroke-width="0.7" opacity="0.4"/>`;
-          h += `<circle cx="${sx+sw/2}" cy="${sy+sd/2}" r="4" fill="none" stroke="${FIX_C}" stroke-width="1.2"/>`;
-
-        } else if (f.type==='cabinets') {
-          const cw=ps(f.width||8), cd=ps(1.5);
-          const cofs=openPx({pos:f.offset, offset:f.offset}, ps(RW(r)));
-          if (f.wall==='north') h += `<rect x="${px(rx0)+cofs}" y="${py(ry0)}" width="${cw}" height="${cd}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1"/>`;
-          else if (f.wall==='south') h += `<rect x="${px(rx0)+cofs}" y="${py(ry0+RD(r))-cd}" width="${cw}" height="${cd}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1"/>`;
-          else if (f.wall==='west')  h += `<rect x="${px(rx0)}" y="${py(ry0)+cofs}" width="${cd}" height="${cw}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1"/>`;
-          else if (f.wall==='east')  h += `<rect x="${px(rx0+RW(r))-cd}" y="${py(ry0)+cofs}" width="${cd}" height="${cw}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1"/>`;
-
-        } else if (f.type==='range') {
-          const sz=ps(2.5), cd=ps(1.5);
-          const rofs=openPx({pos:f.offset, offset:f.offset}, ps(RW(r)));
-          let fx2=px(rx0)+rofs, fy2=py(ry0);
-          if (f.wall==='south') fy2=py(ry0+RD(r))-cd;
-          if (f.wall==='east')  { fx2=px(rx0+RW(r))-cd; fy2=py(ry0)+rofs; }
-          h += `<rect x="${fx2}" y="${fy2}" width="${sz}" height="${cd}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1.2"/>`;
-          [[0.2,0.35],[0.55,0.35],[0.2,0.75],[0.55,0.75]].forEach(([bx,by])=>{
-            h += `<circle cx="${fx2+sz*bx}" cy="${fy2+cd*by}" r="${sz*0.1}" fill="none" stroke="${FIX_C}" stroke-width="1"/>`;
-          });
-
-        } else if (f.type==='sink') {
-          const sw2=ps(2), sd2=ps(1.5);
-          const sofs=openPx({pos:f.offset, offset:f.offset}, ps(RW(r)));
-          let fx2=px(rx0)+sofs, fy2=py(ry0);
-          if (f.wall==='south') fy2=py(ry0+RD(r))-sd2;
-          if (f.wall==='east')  { fx2=px(rx0+RW(r))-sd2; fy2=py(ry0)+sofs; }
-          h += `<rect x="${fx2}" y="${fy2}" width="${sw2}" height="${sd2}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1.2" rx="2"/>`;
-          h += `<circle cx="${fx2+sw2*0.3}" cy="${fy2+sd2*0.5}" r="${sw2*0.14}" fill="none" stroke="${FIX_C}" stroke-width="0.9"/>`;
-          h += `<circle cx="${fx2+sw2*0.7}" cy="${fy2+sd2*0.5}" r="${sw2*0.14}" fill="none" stroke="${FIX_C}" stroke-width="0.9"/>`;
-
-        } else if (f.type==='refrigerator') {
-          const rw2=ps(2.5), rd2=ps(2.8);
-          const rfofs=openPx({pos:f.offset, offset:f.offset}, ps(RW(r)));
-          let fx2=px(rx0)+rfofs, fy2=py(ry0);
-          if (f.wall==='south') fy2=py(ry0+RD(r))-rd2;
-          if (f.wall==='east')  { fx2=px(rx0+RW(r))-rd2; fy2=py(ry0)+rfofs; }
-          h += `<rect x="${fx2}" y="${fy2}" width="${rw2}" height="${rd2}" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1.2" rx="2"/>`;
-          h += `<line x1="${fx2+rw2*0.85}" y1="${fy2+rd2*0.2}" x2="${fx2+rw2*0.85}" y2="${fy2+rd2*0.55}" stroke="${FIX_C}" stroke-width="2"/>`;
-
-        } else if (f.type==='island') {
-          h += `<rect x="${px(rx0+(f.x||0))}" y="${py(ry0+(f.y||0))}" width="${ps(f.width||4)}" height="${ps(f.depth||2)}" fill="rgba(100,150,120,0.15)" stroke="${FIX_C}" stroke-width="1.5" rx="2"/>`;
+      } else if (w === 'south') {
+        const gy = py + ph, gx1 = px + off, gx2 = px + off + dw;
+        if (swing === 'left') {
+          panel = mk('line', { x1: gx1, y1: gy, x2: gx1, y2: gy - dw, ...pa });
+          arc   = mk('path', { d: `M ${gx2} ${gy} A ${dw} ${dw} 0 0 1 ${gx1} ${gy - dw}`, ...aa });
+        } else {
+          panel = mk('line', { x1: gx2, y1: gy, x2: gx2, y2: gy - dw, ...pa });
+          arc   = mk('path', { d: `M ${gx1} ${gy} A ${dw} ${dw} 0 0 0 ${gx2} ${gy - dw}`, ...aa });
         }
-      });
+      } else if (w === 'west') {
+        const gx = px, gy1 = py + off, gy2 = py + off + dw;
+        if (swing === 'left') {
+          panel = mk('line', { x1: gx, y1: gy1, x2: gx + dw, y2: gy1, ...pa });
+          arc   = mk('path', { d: `M ${gx} ${gy2} A ${dw} ${dw} 0 0 0 ${gx + dw} ${gy1}`, ...aa });
+        } else {
+          panel = mk('line', { x1: gx, y1: gy2, x2: gx + dw, y2: gy2, ...pa });
+          arc   = mk('path', { d: `M ${gx} ${gy1} A ${dw} ${dw} 0 0 1 ${gx + dw} ${gy2}`, ...aa });
+        }
+      } else if (w === 'east') {
+        const gx = px + pw, gy1 = py + off, gy2 = py + off + dw;
+        if (swing === 'left') {
+          panel = mk('line', { x1: gx, y1: gy1, x2: gx - dw, y2: gy1, ...pa });
+          arc   = mk('path', { d: `M ${gx} ${gy2} A ${dw} ${dw} 0 0 1 ${gx - dw} ${gy1}`, ...aa });
+        } else {
+          panel = mk('line', { x1: gx, y1: gy2, x2: gx - dw, y2: gy2, ...pa });
+          arc   = mk('path', { d: `M ${gx} ${gy1} A ${dw} ${dw} 0 0 0 ${gx - dw} ${gy2}`, ...aa });
+        }
+      }
+      if (panel) svgEl.appendChild(panel);
+      if (arc)   svgEl.appendChild(arc);
     });
 
-    // ── 7. Room labels ────────────────────────────────────────────────────
-    rooms.forEach(r => {
-      const rx = px(r.x||0), ry = py(r.y||0);
-      const rw = ps(RW(r)), rd = ps(RD(r));
-      const cx = rx+rw/2, cy = ry+rd/2;
-      const fs = Math.max(6.5, Math.min(11, rw/8));
-      if (rw > 34 && rd > 22) {
-        h += `<text x="${cx}" y="${cy-4}" text-anchor="middle" fill="${LABEL}" font-family="PT Serif,serif" font-size="${fs}">${r.name}</text>`;
-        h += `<text x="${cx}" y="${cy+8}" text-anchor="middle" fill="${DIM}" font-family="PT Serif,serif" font-size="${Math.max(5.5,fs-2)}">${RW(r)}′×${RD(r)}′</text>`;
+    // ── Window symbols (3 parallel lines across gap) ──
+    windows.forEach(win => {
+      const ww    = (win.width  || 4) * scale;
+      const off   = (win.offset || 0) * scale;
+      const wn    = win.wall;
+      const wc    = 'rgba(120,190,255,0.75)';
+      const lw    = '1';
+      if (wn === 'north' || wn === 'south') {
+        const wy = wn === 'north' ? py : py + ph;
+        const wx1 = px + off, wx2 = px + off + ww;
+        [-1.8, 0, 1.8].forEach(dy => {
+          svgEl.appendChild(mk('line', { x1: wx1, y1: wy + dy, x2: wx2, y2: wy + dy, stroke: wc, 'stroke-width': lw }));
+        });
+      } else {
+        const wx = wn === 'east' ? px + pw : px;
+        const wy1 = py + off, wy2 = py + off + ww;
+        [-1.8, 0, 1.8].forEach(dx => {
+          svgEl.appendChild(mk('line', { x1: wx + dx, y1: wy1, x2: wx + dx, y2: wy2, stroke: wc, 'stroke-width': lw }));
+        });
       }
     });
 
-    // ── 8. Scale bar + compass ────────────────────────────────────────────
-    const SBlen = ps(10);
-    const SBx = 44, SBy = SVG_H-22;
-    h += `<line x1="${SBx}" y1="${SBy}" x2="${SBx+SBlen}" y2="${SBy}" stroke="${DIM}" stroke-width="2"/>`;
-    h += `<line x1="${SBx}" y1="${SBy-4}" x2="${SBx}" y2="${SBy+4}" stroke="${DIM}" stroke-width="2"/>`;
-    h += `<line x1="${SBx+SBlen}" y1="${SBy-4}" x2="${SBx+SBlen}" y2="${SBy+4}" stroke="${DIM}" stroke-width="2"/>`;
-    h += `<text x="${SBx+SBlen/2}" y="${SBy+12}" text-anchor="middle" fill="${DIM}" font-family="PT Serif,serif" font-size="8">10 ft</text>`;
+    // ── Room label ──
+    if (pw > 42 && ph > 26) {
+      const cx = px + pw / 2;
+      const cy = py + ph / 2;
+      const fs = Math.min(10, Math.max(6, Math.min(pw, ph) / 6));
+      const lc = LABEL_C[t] || '#b0b0b0';
 
-    const Ncx=SVG_W-42, Ncy=SVG_H-28;
-    h += `<circle cx="${Ncx}" cy="${Ncy}" r="14" fill="none" stroke="rgba(100,160,255,0.3)" stroke-width="1"/>`;
-    h += `<polygon points="${Ncx},${Ncy-13} ${Ncx-3},${Ncy-3} ${Ncx},${Ncy-7} ${Ncx+3},${Ncy-3}" fill="rgba(100,160,255,0.75)"/>`;
-    h += `<text x="${Ncx}" y="${Ncy-16}" text-anchor="middle" fill="rgba(100,160,255,0.9)" font-family="PT Serif,serif" font-size="9" font-weight="bold">N</text>`;
-    h += `<text x="${Ncx}" y="${Ncy+10}" text-anchor="middle" fill="rgba(100,160,255,0.55)" font-family="PT Serif,serif" font-size="7">S</text>`;
+      const nameEl = mk('text', { x: cx, y: cy - fs * 0.5, 'text-anchor': 'middle',
+        fill: lc, 'font-size': fs, 'font-weight': '700',
+        'font-family': 'Inter,system-ui,sans-serif', 'letter-spacing': '0.06em' });
+      nameEl.textContent = r.name.toUpperCase();
+      svgEl.appendChild(nameEl);
 
-    // ── 9. Legend ─────────────────────────────────────────────────────────
-    const Lx=SBx, Ly=SVG_H-38;
-    h += `<line x1="${Lx}" y1="${Ly}" x2="${Lx+14}" y2="${Ly}" stroke="${WIN_C}" stroke-width="2.5"/> <text x="${Lx+17}" y="${Ly+3}" fill="${DIM}" font-family="PT Serif,serif" font-size="7">Window</text>`;
-    h += `<line x1="${Lx+62}" y1="${Ly}" x2="${Lx+76}" y2="${Ly}" stroke="${DOOR_C}" stroke-width="1.8"/> <text x="${Lx+79}" y="${Ly+3}" fill="${DIM}" font-family="PT Serif,serif" font-size="7">Door</text>`;
-    h += `<rect x="${Lx+115}" y="${Ly-4}" width="9" height="7" fill="${CLO_C}" stroke="${CLO_S}" stroke-width="1"/> <text x="${Lx+127}" y="${Ly+3}" fill="${DIM}" font-family="PT Serif,serif" font-size="7">Closet</text>`;
-    h += `<rect x="${Lx+168}" y="${Ly-4}" width="9" height="7" fill="${FIX_F}" stroke="${FIX_C}" stroke-width="1"/> <text x="${Lx+180}" y="${Ly+3}" fill="${DIM}" font-family="PT Serif,serif" font-size="7">Fixture</text>`;
-
-    svg.innerHTML = h;
-  }
-
-  // ── Exports ───────────────────────────────────────────────────────────────
-  function exportNotice(tool) {
-    if (!currentPlan) { alert('Please generate a floor plan first.'); return; }
-    if (tool === 'DXF' || tool === 'AutoCAD' || tool === 'Revit') { exportDXF(); return; }
-    if (tool === 'PDF')       { exportPDF(); return; }
-    if (tool === 'Archsynth') { exportArchsynth(); return; }
-  }
-
-  function exportDXF() {
-    const plan  = currentPlan;
-    const rooms = plan.rooms || [];
-    const SCALE = 12;
-    const wallT = SCALE * 0.5;
-    const positions = [];
-    let cx = 0, cy = 0, rowMax = 0;
-    const half    = Math.ceil(rooms.length / 2);
-    const rowGap  = 8 * SCALE;
-    rooms.forEach((room, i) => {
-      const w = (room.w || room.width || 10) * SCALE, h = (room.d || room.depth || 10) * SCALE;
-      if (i === half) { cx = 0; cy -= (rowMax + rowGap); rowMax = 0; }
-      positions.push({ x: cx, y: cy, w, h, room });
-      cx += w + wallT * 2;
-      if (h > rowMax) rowMax = h;
-    });
-    const lwpoly = (pts, layer, closed = true) => {
-      let d = `0\nLWPOLYLINE\n8\n${layer}\n90\n${pts.length}\n70\n${closed?1:0}\n`;
-      pts.forEach(([x,y]) => { d += `10\n${x.toFixed(3)}\n20\n${y.toFixed(3)}\n`; });
-      return d;
-    };
-    const ln    = (x1,y1,x2,y2,layer) => `0\nLINE\n8\n${layer}\n10\n${x1.toFixed(3)}\n20\n${y1.toFixed(3)}\n11\n${x2.toFixed(3)}\n21\n${y2.toFixed(3)}\n`;
-    const arc   = (cx,cy,r,a1,a2,layer) => `0\nARC\n8\n${layer}\n10\n${cx.toFixed(3)}\n20\n${cy.toFixed(3)}\n40\n${r.toFixed(3)}\n50\n${a1}\n51\n${a2}\n`;
-    const mtext = (x,y,txt,layer,h=6,just=5) => `0\nMTEXT\n8\n${layer}\n10\n${x.toFixed(3)}\n20\n${y.toFixed(3)}\n40\n${h.toFixed(3)}\n71\n${just}\n1\n${txt}\n`;
-    let dxf = `0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1015\n9\n$INSUNITS\n70\n1\n9\n$MEASUREMENT\n70\n0\n0\nENDSEC\n`;
-    dxf += `0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nLAYER\n70\n10\n`;
-    [['WALLS',7],['WALLS-INNER',8],['DIMENSIONS',3],['TEXT',2],['DOORS',4],['TITLE',1]].forEach(([name,color]) => {
-      dxf += `0\nLAYER\n2\n${name}\n70\n0\n62\n${color}\n6\nCONTINUOUS\n`;
-    });
-    dxf += `0\nENDTAB\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n`;
-    positions.forEach(({ x, y, w, h, room }) => {
-      dxf += lwpoly([[x,y],[x+w,y],[x+w,y-h],[x,y-h]], 'WALLS');
-      const ix=x+wallT, iy=y-wallT, iw=w-wallT*2, ih=h-wallT*2;
-      dxf += lwpoly([[ix,iy],[ix+iw,iy],[ix+iw,iy-ih],[ix,iy-ih]], 'WALLS-INNER');
-      const mx=x+w/2, my=y-h/2;
-      dxf += mtext(mx, my+SCALE*0.7, room.name.toUpperCase(), 'TEXT', SCALE*0.55);
-      dxf += mtext(mx, my, `${room.w||room.width||'?'}' x ${room.d||room.depth||'?'}'`, 'DIMENSIONS', SCALE*0.42);
-      dxf += mtext(mx, my-SCALE*0.7, `${room.sqft} SF`, 'DIMENSIONS', SCALE*0.38);
-      const doorW = 3 * SCALE;
-      dxf += ln(ix, iy-ih, ix+doorW, iy-ih, 'DOORS');
-      dxf += arc(ix, iy-ih, doorW, 0, 90, 'DOORS');
-    });
-    dxf += `0\nENDSEC\n0\nEOF\n`;
-    const blob = new Blob([dxf], { type: 'application/dxf' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = `${(plan.title||'floor-plan').replace(/\s+/g,'-').toLowerCase()}.dxf`;
-    a.click(); URL.revokeObjectURL(url);
-    showExportToast('DXF downloaded — open in AutoCAD, LibreCAD, or Revit');
-  }
-
-  function exportPDF() {
-    const plan     = currentPlan;
-    const svg      = document.getElementById('bp-svg').outerHTML;
-    const roomRows = (plan.rooms || []).map(r => `<tr><td>${r.name}</td><td>${r.width}′ × ${r.depth}′</td><td>${r.sqft} sq ft</td><td>${r.notes||''}</td></tr>`).join('');
-    const compliance = (plan.codeCompliance||[]).map(c => `<div class="ci"><span class="ci-icon">${c.icon||'✓'}</span><div><strong>${c.title}</strong><p>${c.detail}</p></div></div>`).join('');
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-<title>${plan.title||'Floor Plan'} — BlueprintAI</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,400;0,500;1,400&family=PT+Serif:ital,wght@0,400;0,700;1,400&display=swap');
-  *{box-sizing:border-box;margin:0;padding:0} body{font-family:'PT Serif',serif;background:#fefdfe;color:#335a3a}
-  .cover{background:#335a3a;color:#fefdfe;padding:3rem;page-break-after:always}
-  .cover h1{font-family:'Cormorant',serif;font-size:2.6rem;font-weight:400;margin-bottom:.5rem}
-  .cover .meta{font-size:.85rem;opacity:.6;margin-bottom:2rem;font-style:italic}
-  .cover .summary{font-size:.92rem;line-height:1.75;opacity:.85;max-width:600px;font-style:italic}
-  .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.5rem}
-  .stat{text-align:center;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:.8rem}
-  .stat .num{font-family:'Cormorant',serif;font-size:1.8rem;font-weight:400} .stat .lbl{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;opacity:.7;margin-top:.2rem}
-  .page{padding:2.5rem 3rem;page-break-after:always}
-  .page h2{font-family:'Cormorant',serif;font-size:1.6rem;font-weight:400;color:#335a3a;margin-bottom:1.2rem;padding-bottom:.5rem;border-bottom:2px solid #d8d2c8}
-  .bp-wrap{background:#0d1f12;border-radius:8px;padding:1rem;margin-bottom:1.5rem} svg{width:100%;height:auto}
-  table{width:100%;border-collapse:collapse;font-size:.82rem} th{text-align:left;font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:#668c66;border-bottom:2px solid #d8d2c8;padding:.4rem .6rem;font-weight:700}
-  td{padding:.55rem .6rem;border-bottom:1px solid #ede9e2;color:#335a3a}
-  .ci{display:flex;gap:.7rem;align-items:flex-start;padding:.8rem;background:#f7f5f1;border:1px solid #d8d2c8;border-radius:6px;margin-bottom:.5rem}
-  .ci strong{font-family:'Cormorant',serif;font-size:.95rem;display:block;margin-bottom:.15rem} .ci p{font-size:.75rem;color:#668c66;font-style:italic}
-  .footer{text-align:center;font-size:.7rem;color:#8faf9a;padding:1rem 3rem;border-top:1px solid #d8d2c8;font-style:italic}
-</style></head><body>
-<div class="cover">
-  <h1>${plan.title||'Custom Floor Plan'}</h1>
-  <div class="meta">Generated ${new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}</div>
-  <div class="stats-row">
-    <div class="stat"><div class="num">${plan.totalSqft?.toLocaleString()||'—'}</div><div class="lbl">Total Sq Ft</div></div>
-    <div class="stat"><div class="num">${plan.bedrooms||'—'}</div><div class="lbl">Bedrooms</div></div>
-    <div class="stat"><div class="num">${plan.bathrooms||'—'}</div><div class="lbl">Bathrooms</div></div>
-    <div class="stat"><div class="num">${plan.stories||1}</div><div class="lbl">Stories</div></div>
-  </div>
-  <div class="summary"><strong>Design Summary:</strong> ${plan.summary||''}</div>
-</div>
-<div class="page"><h2>Floor Plan</h2><div class="bp-wrap">${svg}</div></div>
-<div class="page"><h2>Room Schedule</h2><table><thead><tr><th>Room</th><th>Dimensions</th><th>Sq Ft</th><th>Notes</th></tr></thead><tbody>${roomRows}</tbody></table><br/><h2>Code Compliance</h2>${compliance}</div>
-<div class="footer">BlueprintAI · Generated ${new Date().toLocaleDateString()} · For Preliminary Planning Purposes Only · Not for Construction</div>
-</body></html>`;
-    const blob = new Blob([html], { type: 'text/html' });
-    const url  = URL.createObjectURL(blob);
-    const win  = window.open(url, '_blank');
-    if (win) { win.onload = () => win.print(); showExportToast("PDF ready — use Print → Save as PDF"); }
-    URL.revokeObjectURL(url);
-  }
-
-  function exportArchsynth() {
-    const svg  = document.getElementById('bp-svg').outerHTML;
-    const blob = new Blob([svg], { type: 'image/svg+xml' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = `${(currentPlan?.title||'floor-plan').replace(/\s+/g,'-').toLowerCase()}-archsynth.svg`;
-    a.click(); URL.revokeObjectURL(url);
-    showExportToast('SVG downloaded — upload it to Archsynth to generate renders');
-  }
-
-  function showExportToast(msg) {
-    let t = document.getElementById('export-toast');
-    if (!t) {
-      t = document.createElement('div');
-      t.id = 'export-toast';
-      t.style.cssText = `position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);background:#335a3a;border:1px solid rgba(143,175,154,.4);color:#fefdfe;padding:.75rem 1.5rem;border-radius:8px;font-family:'PT Serif',serif;font-size:.85rem;z-index:9999;transition:opacity .4s;white-space:nowrap;box-shadow:0 4px 20px rgba(51,90,58,.3)`;
-      document.body.appendChild(t);
+      const sqft  = Math.round(r.width * r.height);
+      const dimEl = mk('text', { x: cx, y: cy + fs * 1.1, 'text-anchor': 'middle',
+        fill: lc, 'font-size': fs * 0.78, opacity: '0.65',
+        'font-family': 'Inter,system-ui,sans-serif' });
+      dimEl.textContent = `${r.width}′×${r.height}′  ${sqft} sf`;
+      svgEl.appendChild(dimEl);
     }
-    t.textContent  = msg;
-    t.style.opacity = '1';
-    clearTimeout(t._timer);
-    t._timer = setTimeout(() => { t.style.opacity = '0'; }, 4000);
-  }
+  });
 
-  function startOver() {
-    currentPlan = null;
-    document.getElementById('result-section').classList.remove('visible');
-    document.getElementById('gen-btn').classList.remove('hidden');
-    document.getElementById('description').value = '';
-    document.getElementById('state-select').value = '';
-    document.getElementById('city-input').value   = '';
-    document.getElementById('code-box').classList.add('hidden');
-    document.querySelectorAll('.type-card').forEach(c => c.classList.remove('selected'));
-    document.getElementById('save-btn').classList.remove('visible');
-    selectedType = null;
-    ['gs1','gs2','gs3','gs4','gs5'].forEach(id => document.getElementById(id).classList.remove('active','done'));
-    ['dot-1','dot-2','dot-3','dot-4'].forEach((id,i) => {
-      const el = document.getElementById(id);
-      el.classList.remove('done');
-      el.textContent = i + 1;
-      if (i === 0) el.classList.add('active'); else el.classList.remove('active');
-    });
-    ['line-1','line-2','line-3'].forEach(id => document.getElementById(id).classList.remove('done'));
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  // ── Scale bar ──
+  const barLen = 10 * scale;
+  const barY   = VH - TITLE_H - 20;
+  const barX   = 18;
+  const barC   = 'rgba(140,160,200,0.7)';
+  svgEl.appendChild(mk('line', { x1: barX, y1: barY - 5, x2: barX, y2: barY + 5, stroke: barC, 'stroke-width': 1.2 }));
+  svgEl.appendChild(mk('line', { x1: barX, y1: barY, x2: barX + barLen, y2: barY, stroke: barC, 'stroke-width': 1.5 }));
+  svgEl.appendChild(mk('line', { x1: barX + barLen, y1: barY - 5, x2: barX + barLen, y2: barY + 5, stroke: barC, 'stroke-width': 1.2 }));
+  const tl0 = mk('text', { x: barX, y: barY - 8, 'text-anchor': 'middle', fill: barC, 'font-size': 7, 'font-family': 'Inter,system-ui,sans-serif' });
+  tl0.textContent = '0';
+  svgEl.appendChild(tl0);
+  const tl10 = mk('text', { x: barX + barLen, y: barY - 8, 'text-anchor': 'middle', fill: barC, 'font-size': 7, 'font-family': 'Inter,system-ui,sans-serif' });
+  tl10.textContent = "10′";
+  svgEl.appendChild(tl10);
+
+  // ── North arrow ──
+  const ax = VW - 28, ay = 30;
+  svgEl.appendChild(mk('line', { x1: ax, y1: ay + 14, x2: ax, y2: ay - 10, stroke: 'rgba(140,160,200,0.7)', 'stroke-width': 1.5 }));
+  const arrowHead = mk('polygon', { points: `${ax},${ay - 15} ${ax - 4},${ay - 6} ${ax + 4},${ay - 6}`, fill: 'rgba(140,160,200,0.7)' });
+  svgEl.appendChild(arrowHead);
+  const nEl = mk('text', { x: ax, y: ay + 25, 'text-anchor': 'middle', fill: 'rgba(140,160,200,0.7)',
+    'font-size': 9, 'font-weight': '700', 'font-family': 'Inter,system-ui,sans-serif' });
+  nEl.textContent = 'N';
+  svgEl.appendChild(nEl);
+
+  // ── Title block ──
+  const ty = VH - TITLE_H;
+  svgEl.appendChild(mk('line', { x1: 0, y1: ty, x2: VW, y2: ty, stroke: 'rgba(185,210,240,0.3)', 'stroke-width': 0.6 }));
+  svgEl.appendChild(mk('rect', { x: 0, y: ty, width: VW, height: TITLE_H, fill: 'rgba(6,14,28,0.95)' }));
+
+  const planTitle = state.generatedPlan?.title || 'Floor Plan';
+  const tDate     = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  const tLoc      = [state.location?.city, state.location?.state].filter(Boolean).join(', ') || '';
+
+  const ttEl = mk('text', { x: 14, y: ty + 17, fill: 'rgba(185,210,240,0.9)', 'font-size': 11,
+    'font-weight': '700', 'font-family': 'Inter,system-ui,sans-serif' });
+  ttEl.textContent = planTitle;
+  svgEl.appendChild(ttEl);
+
+  const metaEl = mk('text', { x: 14, y: ty + 31, fill: 'rgba(185,210,240,0.45)', 'font-size': 8.5,
+    'font-family': 'Inter,system-ui,sans-serif' });
+  metaEl.textContent = [tLoc, tDate, 'Scale: 1/4″ = 1′'].filter(Boolean).join('  ·  ');
+  svgEl.appendChild(metaEl);
+
+  if (state.generatedPlan?.totalSqft) {
+    const sqEl = mk('text', { x: VW - 14, y: ty + 24, 'text-anchor': 'end',
+      fill: 'rgba(185,210,240,0.55)', 'font-size': 9.5, 'font-family': 'Inter,system-ui,sans-serif' });
+    sqEl.textContent = state.generatedPlan.totalSqft.toLocaleString() + ' sq ft';
+    svgEl.appendChild(sqEl);
   }
+}
+
+// ── Room List & Compliance ─────────────────────────────────────────────────
+function renderRoomList(rooms) {
+  const ul = document.getElementById('room-list');
+  ul.innerHTML = '';
+  rooms.filter(r => r.type !== 'hallway').forEach(r => {
+    const sqft = Math.round(r.width * r.height);
+    const li   = document.createElement('li');
+    li.innerHTML = `<span class="room-name">${r.name}</span><span class="room-sqft">${r.width}′×${r.height}′ · ${sqft} sf</span>`;
+    ul.appendChild(li);
+  });
+}
+
+function renderCompliance(checks) {
+  const ul = document.getElementById('compliance-list');
+  ul.innerHTML = '';
+  checks.forEach(c => {
+    const li  = document.createElement('li');
+    li.className = 'compliance-item';
+    const dot = document.createElement('div');
+    dot.className = 'dot ' + (c.status || 'pass');
+    li.appendChild(dot);
+    const span = document.createElement('span');
+    span.textContent = c.check;
+    li.appendChild(span);
+    ul.appendChild(li);
+  });
+}
+
+// ── Refine Plan ────────────────────────────────────────────────────────────
+async function refinePlan() {
+  const input = document.getElementById('refine-input').value.trim();
+  if (!input) { showToast('Please describe what you want to change.', 'error'); return; }
+  if (!state.generatedPlan) return;
+
+  const btn     = document.getElementById('refine-btn');
+  const spinner = document.getElementById('refine-spinner');
+  btn.disabled  = true;
+  spinner.style.display = 'inline-block';
+
+  const prompt = `You are an expert architectural designer. Refine this floor plan based on the user's feedback.
+
+CURRENT PLAN JSON:
+${JSON.stringify(state.generatedPlan)}
+
+USER FEEDBACK:
+${input}
+
+Return the COMPLETE updated plan as a JSON object in exactly the same format. Ensure no room overlaps and all rooms still connect logically. Return ONLY raw JSON, no markdown, no code fences.`;
+
+  try {
+    const res  = await fetch('/api/generate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    const text = data.content?.[0]?.text || '';
+    let planObj;
+    try { planObj = JSON.parse(text); }
+    catch {
+      const m = text.match(/\{[\s\S]*\}/);
+      planObj = m ? JSON.parse(m[0]) : null;
+    }
+    if (!planObj) throw new Error('Could not parse refined plan.');
+    if (planObj.rooms && !planObj.floors) {
+      planObj.floors = [{ level: 1, label: 'Ground Floor', rooms: planObj.rooms }];
+    }
+    state.generatedPlan = planObj;
+    state.currentFloor  = 0;
+    renderResult(planObj);
+    document.getElementById('refine-input').value = '';
+    showToast('Plan refined!', 'success');
+  } catch (e) {
+    showToast('Refinement failed: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    spinner.style.display = 'none';
+  }
+}
+
+// ── Save Plan ──────────────────────────────────────────────────────────────
+async function savePlan() {
+  if (!window._currentUser || !window._fb || !state.generatedPlan) return;
+  try {
+    const { db, collection, addDoc, serverTimestamp } = window._fb;
+    const plan = state.generatedPlan;
+    await addDoc(collection(db, 'plans', window._currentUser.uid, 'items'), {
+      title:      plan.title || 'Untitled Plan',
+      sqft:       plan.totalSqft || state.sqft || 0,
+      floors:     plan.floors || [],
+      compliance: plan.compliance || [],
+      summary:    plan.summary || '',
+      location:   state.location,
+      spaceType:  state.spaceType,
+      createdAt:  serverTimestamp(),
+    });
+    showToast('Plan saved to My Plans!', 'success');
+  } catch (e) { showToast('Save failed: ' + e.message, 'error'); }
+}
+
+// ── My Plans Drawer ────────────────────────────────────────────────────────
+async function openPlansDrawer() {
+  document.getElementById('drawer-overlay').classList.add('open');
+  document.getElementById('plans-drawer').classList.add('open');
+  if (!window._currentUser || !window._fb) return;
+  const body = document.getElementById('drawer-body');
+  body.innerHTML = '<p class="drawer-empty">Loading…</p>';
+  try {
+    const { db, collection, query, orderBy, getDocs } = window._fb;
+    const q    = query(collection(db, 'plans', window._currentUser.uid, 'items'), orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    if (snap.empty) { body.innerHTML = '<p class="drawer-empty">No saved plans yet.</p>'; return; }
+    body.innerHTML = '';
+    snap.forEach(doc => {
+      const d    = doc.data();
+      const card = document.createElement('div');
+      card.className = 'plan-card';
+      const date = d.createdAt?.toDate ? d.createdAt.toDate().toLocaleDateString() : 'Unknown';
+      card.innerHTML = `<h4>${d.title || 'Untitled'}</h4><p class="meta">${d.sqft || '?'} sq ft · ${date}</p>`;
+      card.onclick   = () => { restorePlan(d); closePlansDrawer(); };
+      body.appendChild(card);
+    });
+  } catch (e) {
+    body.innerHTML = `<p class="drawer-empty">Error: ${e.message}</p>`;
+  }
+}
+
+function closePlansDrawer() {
+  document.getElementById('drawer-overlay').classList.remove('open');
+  document.getElementById('plans-drawer').classList.remove('open');
+}
+
+function restorePlan(d) {
+  state.generatedPlan = d;
+  state.currentFloor  = 0;
+  if (d.rooms && !d.floors) {
+    d.floors = [{ level: 1, label: 'Ground Floor', rooms: d.rooms }];
+  }
+  document.querySelector('.wizard-wrap').style.display      = 'none';
+  document.getElementById('generate-loading').style.display = 'none';
+  renderResult(d);
+  if (window._currentUser) document.getElementById('auth-save-btn').classList.add('visible');
+}
+
+// ── Export ─────────────────────────────────────────────────────────────────
+function exportSVG() {
+  const svgEl   = document.getElementById('floor-plan-svg');
+  const svgStr  = new XMLSerializer().serializeToString(svgEl);
+  const blob    = new Blob([svgStr], { type: 'image/svg+xml' });
+  const url     = URL.createObjectURL(blob);
+  const a       = document.createElement('a');
+  a.href        = url;
+  a.download    = (state.generatedPlan?.title || 'floor-plan').replace(/\s+/g, '-').toLowerCase() + '.svg';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('SVG downloaded.');
+}
+
+function exportPDF() {
+  if (!state.generatedPlan) { showToast('No plan to export.', 'error'); return; }
+  const plan   = state.generatedPlan;
+  const floors = plan.floors || [{ level: 1, label: 'Ground Floor', rooms: plan.rooms || [] }];
+  const floor  = floors[state.currentFloor] || floors[0];
+  const rooms  = floor.rooms || [];
+
+  const svgStr = new XMLSerializer().serializeToString(document.getElementById('floor-plan-svg'));
+  const loc    = [state.location.city, state.location.state, state.location.country].filter(Boolean).join(', ') || 'Not specified';
+  const tDate  = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  const roomRows = rooms.filter(r => r.type !== 'hallway').map(r => {
+    const sqft = Math.round(r.width * r.height);
+    return `<tr><td>${r.name}</td><td>${r.width}′ × ${r.height}′</td><td>${sqft} sq ft</td><td>${r.type || '—'}</td></tr>`;
+  }).join('');
+
+  const compRows = (plan.compliance || []).map(c => {
+    const icon = c.status === 'pass' ? '✅' : c.status === 'warn' ? '⚠️' : '❌';
+    return `<li>${icon} ${c.check}</li>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html><html><head>
+<title>${plan.title || 'Floor Plan'}</title>
+<style>
+  body{font-family:'Georgia',serif;margin:0;padding:0;color:#1a1a1a;background:#fff;}
+  .tb{border-bottom:3px solid #1a2a4a;padding:1.5rem 2rem 1.1rem;background:#f4f6fa;}
+  .tb h1{font-size:1.75rem;margin:0 0 .35rem;color:#1a2a4a;}
+  .tb-meta{display:flex;gap:2.5rem;font-size:.82rem;color:#555;flex-wrap:wrap;}
+  .plan{padding:1.25rem 2rem;text-align:center;}
+  .plan svg{max-width:100%;height:auto;border:1px solid #ccc;border-radius:4px;}
+  .details{padding:0 2rem 1.5rem;display:grid;grid-template-columns:1fr 1fr;gap:2rem;}
+  h2{font-size:.9rem;text-transform:uppercase;letter-spacing:.09em;color:#1a2a4a;border-bottom:1px solid #ccc;padding-bottom:.3rem;margin-bottom:.65rem;}
+  table{width:100%;border-collapse:collapse;font-size:.82rem;}
+  th{background:#eef0f5;padding:.4rem .5rem;text-align:left;border:1px solid #ddd;font-weight:700;}
+  td{padding:.35rem .5rem;border:1px solid #ddd;}
+  ul.comp{list-style:none;padding:0;font-size:.82rem;}
+  ul.comp li{padding:.3rem 0;border-bottom:1px solid #eee;}
+  .notes{padding:0 2rem 2rem;font-size:.88rem;line-height:1.7;color:#444;}
+  @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
+</style></head><body>
+<div class="tb">
+  <h1>${plan.title || 'Floor Plan'}</h1>
+  <div class="tb-meta">
+    <span>📍 ${loc}</span>
+    <span>📅 ${tDate}</span>
+    <span>📐 Scale: 1/4″ = 1′</span>
+    ${plan.totalSqft ? `<span>📏 ${plan.totalSqft.toLocaleString()} sq ft total</span>` : ''}
+    ${floor.label ? `<span>🏢 ${floor.label}</span>` : ''}
+  </div>
+</div>
+<div class="plan">${svgStr}</div>
+<div class="details">
+  <div>
+    <h2>Room Schedule</h2>
+    <table><thead><tr><th>Room</th><th>Dimensions</th><th>Area</th><th>Type</th></tr></thead>
+    <tbody>${roomRows}</tbody></table>
+  </div>
+  <div>
+    <h2>Code Compliance</h2>
+    <ul class="comp">${compRows}</ul>
+  </div>
+</div>
+<div class="notes">
+  <h2>Design Notes</h2>
+  <p>${plan.summary || ''}</p>
+</div>
+</body></html>`;
+
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); }, 900);
+}
+
+function exportDXF() {
+  const floors = state.generatedPlan?.floors || [{ rooms: state.generatedPlan?.rooms || [] }];
+  const rooms  = (floors[state.currentFloor] || floors[0])?.rooms || [];
+  if (!rooms.length) { showToast('No plan to export.', 'error'); return; }
+  const SC = 12;
+  let dxf  = '0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1009\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n';
+  rooms.forEach(r => {
+    const x1 = r.x * SC, y1 = r.y * SC, x2 = (r.x + r.width) * SC, y2 = (r.y + r.height) * SC;
+    [[x1,y1,x2,y1],[x2,y1,x2,y2],[x2,y2,x1,y2],[x1,y2,x1,y1]].forEach(([ax,ay,bx,by]) => {
+      dxf += `0\nLINE\n8\n${r.name}\n10\n${ax}\n20\n${ay}\n30\n0\n11\n${bx}\n21\n${by}\n31\n0\n`;
+    });
+    dxf += `0\nTEXT\n8\n${r.name}\n10\n${(x1+x2)/2}\n20\n${(y1+y2)/2}\n30\n0\n40\n10\n1\n${r.name}\n`;
+  });
+  dxf += '0\nENDSEC\n0\nEOF\n';
+  const blob = new Blob([dxf], { type: 'application/dxf' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = (state.generatedPlan?.title || 'floor-plan').replace(/\s+/g, '-').toLowerCase() + '.dxf';
+  a.click(); URL.revokeObjectURL(url);
+  showToast('DXF downloaded.');
+}
+
+function exportArchsynth() {
+  const plan = state.generatedPlan;
+  if (!plan) { showToast('No plan to export.', 'error'); return; }
+  const payload = JSON.stringify({ blueprint: plan, generator: 'BlueprintAI', version: '2.0' }, null, 2);
+  const blob    = new Blob([payload], { type: 'application/json' });
+  const url     = URL.createObjectURL(blob);
+  const a       = document.createElement('a');
+  a.href = url; a.download = (plan.title || 'floor-plan').replace(/\s+/g, '-').toLowerCase() + '.archsynth.json';
+  a.click(); URL.revokeObjectURL(url);
+  showToast('Archsynth JSON exported.');
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function startOver() {
+  state.generatedPlan = null;
+  state.photo         = null;
+  state.aiPhotoData   = null;
+  state.currentFloor  = 0;
+  document.querySelector('.wizard-wrap').style.display      = '';
+  document.getElementById('result-section').style.display   = 'none';
+  document.getElementById('generate-loading').style.display = 'none';
+  document.getElementById('refine-section').style.display   = 'none';
+  document.getElementById('floor-tabs').style.display       = 'none';
+  document.getElementById('auth-save-btn').classList.remove('visible');
+  goToStep(0);
+  clearPhoto();
+}
+
+let _toastTimer;
+function showToast(msg, type = '') {
+  const t   = document.getElementById('toast');
+  t.textContent = msg;
+  t.className   = 'toast show ' + type;
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
+}
 </script>
 </body>
 </html>
