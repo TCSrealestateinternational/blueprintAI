@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>BlueprintAI — AI Floor Plan Generator</title>
+<title>Waymark Blueprint | AI Floor Plan Generator</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -485,7 +485,7 @@ input:focus, select:focus, textarea:focus {
       <!-- Pencil tip dot -->
       <circle cx="24.5" cy="27.5" r="1.8" fill="#668c66"/>
     </svg>
-    BlueprintAI
+    Waymark Blueprint
   </div>
   <div class="nav-actions">
     <div id="auth-signed-out">
@@ -507,7 +507,7 @@ input:focus, select:focus, textarea:focus {
 <section class="hero">
   <div class="hero-inner">
     <div class="hero-text">
-      <h1>Design Your<br><span>Dream Home</span><br>with AI</h1>
+      <h1>Design Your<br><span>Dream Home</span></h1>
       <p>Describe your vision, upload a photo or existing blueprint, and receive a detailed professional floor plan — complete with door arcs, window symbols, and code compliance checks.</p>
       <div class="badge-row">
         <span class="badge">AI-Powered</span>
@@ -1940,7 +1940,7 @@ function exportDXF() {
 function exportArchsynth() {
   const plan = state.generatedPlan;
   if (!plan) { showToast('No plan to export.', 'error'); return; }
-  const payload = JSON.stringify({ blueprint: plan, generator: 'BlueprintAI', version: '2.0' }, null, 2);
+  const payload = JSON.stringify({ blueprint: plan, generator: 'Waymark Blueprint', version: '2.0' }, null, 2);
   const blob    = new Blob([payload], { type: 'application/json' });
   const url     = URL.createObjectURL(blob);
   const a       = document.createElement('a');
